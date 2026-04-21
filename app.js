@@ -156,10 +156,19 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     const logType = currentStatus === 'IN' ? 'OUT' : 'IN';
     
     try {
-        // Fix: Remove trailing slash from apiUrl
         const baseUrl = config.apiUrl.replace(/\/$/, '');
+        
+        // Format timestamp as "YYYY-MM-DD HH:MM:SS"
+        const now = new Date();
+        const timestamp = now.getFullYear() + '-' + 
+            String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+            String(now.getDate()).padStart(2, '0') + ' ' + 
+            String(now.getHours()).padStart(2, '0') + ':' + 
+            String(now.getMinutes()).padStart(2, '0') + ':' + 
+            String(now.getSeconds()).padStart(2, '0');
+        
         const response = await fetch(
-            `${baseUrl}/api/method/erpnext.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field`,
+            `${baseUrl}/api/resource/Employee%20Checkin`,
             {
                 method: 'POST',
                 headers: {
@@ -167,23 +176,22 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
                     'Authorization': `token ${config.apiKey}:${config.apiSecret}`
                 },
                 body: JSON.stringify({
-                    employee_field_value: config.employeeId,
-                    timestamp: new Date().toISOString(),
-                    latitude: currentLocation.latitude,
-                    longitude: currentLocation.longitude,
-                    log_type: logType
+                    employee: config.employeeId,
+                    log_type: logType,
+                    time: timestamp
                 })
             }
         );
         
         const result = await response.json();
         
-        if (response.ok && result.message) {
+        if (response.ok && result.data) {
             currentStatus = logType;
             updateButtonState();
-            showStatus(`Successfully checked ${logType.toLowerCase()} at ${new Date().toLocaleTimeString()}`, 'success');
+            showStatus(`Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
         } else {
-            throw new Error(result.message || 'Check-in failed');
+            const errorMsg = result.message || JSON.stringify(result);
+            throw new Error(errorMsg);
         }
     } catch (error) {
         showStatus(`Error: ${error.message}`, 'error');
