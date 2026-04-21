@@ -53,7 +53,9 @@ function saveConfig() {
 // Fetch employee details from ERPNext
 async function fetchEmployeeInfo() {
     try {
-        const response = await fetch(`${config.apiUrl}/api/resource/Employee/${config.employeeId}`, {
+        // Fix: Remove trailing slash from apiUrl
+        const baseUrl = config.apiUrl.replace(/\/$/, '');
+        const response = await fetch(`${baseUrl}/api/resource/Employee/${config.employeeId}`, {
             headers: {
                 'Authorization': `token ${config.apiKey}:${config.apiSecret}`
             }
@@ -74,7 +76,7 @@ async function fetchEmployeeInfo() {
         }
     } catch (error) {
         console.error('Error fetching employee:', error);
-        document.getElementById('employeeInfo').textContent = 'Connection error';
+        document.getElementById('employeeInfo').textContent = 'Connection error - check CORS settings';
     }
 }
 
@@ -82,8 +84,10 @@ async function fetchEmployeeInfo() {
 async function checkCurrentStatus() {
     try {
         const today = new Date().toISOString().split('T')[0];
+        // Fix: Remove trailing slash from apiUrl
+        const baseUrl = config.apiUrl.replace(/\/$/, '');
         const response = await fetch(
-            `${config.apiUrl}/api/resource/Employee Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time desc&limit=1`,
+            `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20desc&limit=1`,
             {
                 headers: {
                     'Authorization': `token ${config.apiKey}:${config.apiSecret}`
@@ -152,8 +156,10 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     const logType = currentStatus === 'IN' ? 'OUT' : 'IN';
     
     try {
+        // Fix: Remove trailing slash from apiUrl
+        const baseUrl = config.apiUrl.replace(/\/$/, '');
         const response = await fetch(
-            `${config.apiUrl}/api/method/erpnext.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field`,
+            `${baseUrl}/api/method/erpnext.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field`,
             {
                 method: 'POST',
                 headers: {
