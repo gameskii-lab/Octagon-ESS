@@ -5,7 +5,10 @@ let config = {
     apiUrl: '',
     apiKey: '',
     apiSecret: '',
-    employeeId: ''
+    employeeId: '',
+    siteLat: null,
+    siteLng: null,
+    siteRadius: 100
 };
 
 // Initialize on page load
@@ -31,6 +34,9 @@ function loadConfig() {
         document.getElementById('apiKey').value = config.apiKey || '';
         document.getElementById('apiSecret').value = config.apiSecret || '';
         document.getElementById('employeeId').value = config.employeeId || '';
+        document.getElementById('siteLat').value = config.siteLat || '';
+        document.getElementById('siteLng').value = config.siteLng || '';
+        document.getElementById('siteRadius').value = config.siteRadius || 100;
         
         if (config.apiUrl && config.apiKey && config.apiSecret && config.employeeId) {
             fetchEmployeeInfo();
@@ -44,6 +50,9 @@ function saveConfig() {
     config.apiKey = document.getElementById('apiKey').value;
     config.apiSecret = document.getElementById('apiSecret').value;
     config.employeeId = document.getElementById('employeeId').value;
+    config.siteLat = parseFloat(document.getElementById('siteLat').value);
+    config.siteLng = parseFloat(document.getElementById('siteLng').value);
+    config.siteRadius = parseInt(document.getElementById('siteRadius').value) || 100;
     
     localStorage.setItem('erpnext_config', JSON.stringify(config));
     fetchEmployeeInfo();
@@ -149,6 +158,27 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         return;
     }
     
+    // NEW: Geofencing check
+    if (config.siteLat && config.siteLng) {
+        const distance = calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            config.siteLat,
+            config.siteLng
+        );
+        
+        if (distance > config.siteRadius) {
+            showStatus(
+                `You are ${Math.round(distance)}m from the worksite. Maximum allowed is ${config.siteRadius}m. Check-in denied.`,
+                'error'
+            );
+            return;
+        }
+        
+        // Optional: Show distance for transparency
+        console.log(`Distance to worksite: ${Math.round(distance)}m`);
+    }
+    
     const btn = document.getElementById('checkBtn');
     btn.disabled = true;
     btn.textContent = 'Processing...';
@@ -208,5 +238,18 @@ function showStatus(message, type) {
     setTimeout(() => {
         statusDiv.textContent = '';
         statusDiv.className = '';
+
+// Calculate distance between two coordinates in meters
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in meters
+}
     }, 5000);
 }
