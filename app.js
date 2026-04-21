@@ -167,10 +167,11 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
                     'Authorization': `token ${config.apiKey}:${config.apiSecret}`
                 },
                 body: JSON.stringify({
-                    employee: config.employeeId,
-                    log_type: logType,
+                    employee_field_value: config.employeeId,
+                    timestamp: new Date().toISOString(),
                     latitude: currentLocation.latitude,
-                    longitude: currentLocation.longitude
+                    longitude: currentLocation.longitude,
+                    log_type: logType
                 })
             }
         );
