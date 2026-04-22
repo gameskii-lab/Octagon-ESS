@@ -15,7 +15,8 @@ let config = {
 };
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', async () => {
     displayDate();
     getLocation();
     
@@ -28,8 +29,34 @@ document.addEventListener('DOMContentLoaded', () => {
         config = JSON.parse(savedConfig);
         currentEmployee = JSON.parse(savedEmployee);
         userEmail = savedEmail;
+        
+        // Update UI with employee info
+        const employeeName = currentEmployee.name || currentEmployee.employee_name || 'Employee';
+        const employeeInfoEl = document.getElementById('employeeInfo');
+        if (employeeInfoEl) {
+            employeeInfoEl.innerHTML = `
+                👤 ${employeeName}<br>
+                🏢 ${currentEmployee.department || 'N/A'}<br>
+                💼 ${currentEmployee.designation || 'N/A'}<br>
+                <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
+                    ${config.employmentType}
+                </span>
+            `;
+        }
+        
+        // Update drawer info
+        updateDrawerInfo();
+        
+        // Show app section
         showAppSection();
+        
+        // Re-fetch today's shift assignment (critical!)
+        await fetchTodaysShiftAssignment();
+        
+        // Initialize the correct dashboard
         initializeDashboard();
+        
+        showStatus(`Welcome back, ${employeeName}!`, 'success');
     }
 });
 
