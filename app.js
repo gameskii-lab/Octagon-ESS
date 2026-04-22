@@ -3,16 +3,16 @@ let currentStatus = 'OUT';
 let currentLocation = null;
 let sessionToken = null;
 let currentEmployee = null;
+let todaysAssignment = null;
 let config = {
     apiUrl: '',
-    apiKey: '',
-    apiSecret: '',
     employeeId: '',
     employmentType: '',
     siteLat: null,
     siteLng: null,
     siteRadius: 100,
-    todaysShift: null
+    todaysShift: null,
+    shiftLocationName: ''
 };
 
 // Initialize on page load
@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSavedServerUrl();
     getLocation();
     
-    // Check if already logged in (session token exists)
     const savedToken = localStorage.getItem('sessionToken');
     const savedEmployee = localStorage.getItem('currentEmployee');
     const savedConfig = localStorage.getItem('erpnext_config');
@@ -35,14 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Display current date
 function displayDate() {
     const now = new Date();
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     document.getElementById('dateDisplay').textContent = now.toLocaleDateString('en-US', options);
 }
 
-// Load saved server URL
 function loadSavedServerUrl() {
     const saved = localStorage.getItem('erpnext_config');
     if (saved) {
@@ -51,7 +48,6 @@ function loadSavedServerUrl() {
     }
 }
 
-// Calculate distance between two coordinates in meters
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -64,7 +60,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Get device location
 function getLocation() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -86,7 +81,6 @@ function getLocation() {
     }
 }
 
-// Handle login
 async function handleLogin() {
     const serverUrl = document.getElementById('serverUrl').value;
     const email = document.getElementById('loginEmail').value;
@@ -114,10 +108,8 @@ async function handleLogin() {
             localStorage.setItem('sessionToken', sessionToken);
             
             await fetchEmployeeByUser(email);
-            await fetchTodaysAssignment();
+            await fetchTodaysShiftAssignment();
             
-            config.apiKey = ''; // Not needed with session token
-            config.apiSecret = '';
             localStorage.setItem('erpnext_config', JSON.stringify(config));
             localStorage.setItem('currentEmployee', JSON.stringify(currentEmployee));
             
@@ -132,15 +124,12 @@ async function handleLogin() {
     }
 }
 
-// Fetch employee record linked to user
 async function fetchEmployeeByUser(email) {
     const baseUrl = config.apiUrl.replace(/\/$/, '');
     
     const response = await fetch(
         `${baseUrl}/api/resource/Employee?filters=[["user_id","=","${email}"]]&limit=1`,
-        {
-            headers: { 'Authorization': `Bearer ${sessionToken}` }
-        }
+        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
     );
     
     const data = await response.json();
@@ -163,76 +152,90 @@ async function fetchEmployeeByUser(email) {
     }
 }
 
-// Fetch today's worksite assignment (for daily paid workers)
-async function fetchTodaysAssignment() {
-    if (config.employmentType !== 'Daily Wage') {
-        document.getElementById('worksiteDisplay').textContent = '🏢 Office-based employee';
-        return;
-    }
-    
+// 🔥 NEW: Fetch today's Shift Assignment and linked Shift Location
+async function fetchTodaysShiftAssignment() {
     const baseUrl = config.apiUrl.replace(/\/$/, '');
     const today = new Date().toISOString().split('T')[0];
     
     try {
-        // Try to fetch from Worker Assignment doctype
-        const response = await fetch(
-            `${baseUrl}/api/resource/Worker%20Assignment?filters=[["employee","=","${config.employeeId}"],["assignment_date","=","${today}"]]&limit=1`,
-            {
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            }
+        // Step 1: Query Shift Assignment for today
+        const shiftResponse = await fetch(
+            `${baseUrl}/api/resource/Shift%20Assignment?filters=[["employee","=","${config.employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&fields=["name","shift_type"]&limit=1`,
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
         );
         
-        const data = await response.json();
+        const shiftData = await shiftResponse.json();
         
-        if (data.data && data.data.length > 0) {
-            const assignment = data.data[0];
+        if (shiftData.data && shiftData.data.length > 0) {
+            const assignment = shiftData.data[0];
+            todaysAssignment = assignment;
+            config.todaysShift = assignment.shift_type;
             
-            // Fetch shift location details
-            if (assignment.shift_location) {
-                const locResponse = await fetch(
-                    `${baseUrl}/api/resource/Shift%20Location/${assignment.shift_location}`,
-                    {
-                        headers: { 'Authorization': `Bearer ${sessionToken}` }
-                    }
+            // Step 2: Fetch Shift Type details to get Shift Location
+            const shiftTypeResponse = await fetch(
+                `${baseUrl}/api/resource/Shift%20Type/${assignment.shift_type}`,
+                { headers: { 'Authorization': `Bearer ${sessionToken}` } }
+            );
+            
+            const shiftTypeData = await shiftTypeResponse.json();
+            
+            if (shiftTypeData.data && shiftTypeData.data.shift_location) {
+                const shiftLocation = shiftTypeData.data.shift_location;
+                
+                // Step 3: Fetch Shift Location for geofencing
+                const locationResponse = await fetch(
+                    `${baseUrl}/api/resource/Shift%20Location/${shiftLocation}`,
+                    { headers: { 'Authorization': `Bearer ${sessionToken}` } }
                 );
                 
-                const locData = await locResponse.json();
+                const locationData = await locationResponse.json();
                 
-                config.siteLat = locData.data.latitude;
-                config.siteLng = locData.data.longitude;
-                config.siteRadius = locData.data.allowed_radius || 100;
-                config.todaysShift = assignment.shift_type;
-                
+                if (locationData.data) {
+                    config.siteLat = locationData.data.latitude;
+                    config.siteLng = locationData.data.longitude;
+                    config.siteRadius = locationData.data.allowed_radius || 100;
+                    config.shiftLocationName = locationData.data.location_name;
+                    
+                    document.getElementById('worksiteDisplay').innerHTML = 
+                        `✅ Assigned: ${locationData.data.location_name}<br>
+                         📏 Radius: ${config.siteRadius}m<br>
+                         🕒 Shift: ${assignment.shift_type}`;
+                    
+                    document.getElementById('checkBtn').disabled = false;
+                } else {
+                    document.getElementById('worksiteDisplay').innerHTML = 
+                        '⚠️ Worksite location not configured. Contact admin.';
+                }
+            } else {
                 document.getElementById('worksiteDisplay').innerHTML = 
-                    `✅ Assigned: ${locData.data.location_name}<br>📏 Radius: ${config.siteRadius}m`;
+                    '⚠️ No worksite linked to your shift. Using default if available.';
+                document.getElementById('checkBtn').disabled = false;
             }
         } else {
-            // Fallback: Try to fetch from employee's default shift
             document.getElementById('worksiteDisplay').innerHTML = 
-                '⚠️ No worksite assigned for today. Using default if available.';
+                '⚠️ No shift assigned for today. Contact scheduler.';
+            document.getElementById('checkBtn').disabled = true;
         }
     } catch (error) {
-        console.error('Error fetching assignment:', error);
-        document.getElementById('worksiteDisplay').textContent = '⚠️ Could not load worksite assignment';
+        console.error('Error fetching shift assignment:', error);
+        document.getElementById('worksiteDisplay').textContent = '❌ Error loading assignment';
+        document.getElementById('checkBtn').disabled = true;
     }
 }
 
-// Show main app section
 function showAppSection() {
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('configSection').classList.add('hidden');
     document.getElementById('appSection').classList.remove('hidden');
     
-    // Enable check-in button for daily wage workers
     if (config.employmentType === 'Daily Wage') {
-        document.getElementById('checkBtn').disabled = false;
         checkCurrentStatus();
     } else {
         document.getElementById('checkBtn').style.display = 'none';
+        document.getElementById('worksiteDisplay').textContent = '🏢 Office-based employee';
     }
 }
 
-// Initialize appropriate dashboard
 function initializeDashboard() {
     if (config.employmentType === 'Daily Wage') {
         document.getElementById('fieldWorkerDashboard').classList.remove('hidden');
@@ -245,26 +248,20 @@ function initializeDashboard() {
     }
 }
 
-// Load field worker dashboard (hours summary)
 async function loadFieldWorkerDashboard() {
     const baseUrl = config.apiUrl.replace(/\/$/, '');
     const today = new Date().toISOString().split('T')[0];
     
     try {
-        // Fetch today's check-ins
         const response = await fetch(
             `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`,
-            {
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            }
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
         );
         
         const data = await response.json();
         
         if (data.data && data.data.length > 0) {
-            // Calculate hours from check-in/out pairs
             const hours = calculateHoursFromCheckins(data.data);
-            
             document.getElementById('hoursDisplay').innerHTML = `
                 <div class="hours-row"><span>Regular Hours:</span> <span>${hours.regular.toFixed(2)} hrs</span></div>
                 <div class="hours-row"><span>Overtime:</span> <span>${hours.overtime.toFixed(2)} hrs</span></div>
@@ -274,11 +271,9 @@ async function loadFieldWorkerDashboard() {
             document.getElementById('hoursDisplay').innerHTML = '<p>No check-ins today</p>';
         }
         
-        // Placeholder for week hours
         document.getElementById('weekHoursDisplay').innerHTML = `
-            <div class="hours-row"><span>Mon-Wed:</span> <span>24.5 hrs</span></div>
-            <div class="hours-total"><span>Week Total:</span> <span>24.5 hrs</span></div>
-            <p style="font-size: 12px; color: #666; margin-top: 8px;">* Week calculation coming soon</p>
+            <div class="hours-row"><span>This Week:</span> <span>Calculating...</span></div>
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">* Full week view coming soon</p>
         `;
     } catch (error) {
         console.error('Error loading dashboard:', error);
@@ -286,27 +281,21 @@ async function loadFieldWorkerDashboard() {
     }
 }
 
-// Calculate hours from check-in records
 function calculateHoursFromCheckins(checkins) {
     let totalMinutes = 0;
-    let regularMinutes = 0;
-    let overtimeMinutes = 0;
-    
-    // Standard 8-hour shift = 480 minutes
-    const standardShiftMinutes = 480;
+    const standardShiftMinutes = 480; // 8 hours
     
     for (let i = 0; i < checkins.length; i += 2) {
         if (i + 1 < checkins.length) {
             const inTime = new Date(checkins[i].time);
             const outTime = new Date(checkins[i+1].time);
             const diffMinutes = (outTime - inTime) / (1000 * 60);
-            
             totalMinutes += diffMinutes;
         }
     }
     
-    regularMinutes = Math.min(totalMinutes, standardShiftMinutes);
-    overtimeMinutes = Math.max(0, totalMinutes - standardShiftMinutes);
+    const regularMinutes = Math.min(totalMinutes, standardShiftMinutes);
+    const overtimeMinutes = Math.max(0, totalMinutes - standardShiftMinutes);
     
     return {
         regular: regularMinutes / 60,
@@ -315,7 +304,6 @@ function calculateHoursFromCheckins(checkins) {
     };
 }
 
-// Load office staff dashboard
 async function loadOfficeStaffDashboard() {
     const today = new Date();
     const month = today.toLocaleDateString('en-US', { month: 'long' });
@@ -323,29 +311,24 @@ async function loadOfficeStaffDashboard() {
     
     document.getElementById('attendanceDisplay').innerHTML = `
         <p><strong>${month} ${year}</strong></p>
-        <div class="hours-row"><span>Present Days:</span> <span>18 days</span></div>
-        <div class="hours-row"><span>Absent Days:</span> <span>0 days</span></div>
-        <div class="hours-row"><span>Holidays:</span> <span>2 days</span></div>
-        <p style="font-size: 12px; color: #666; margin-top: 8px;">* Detailed calendar coming soon</p>
+        <div class="hours-row"><span>Present Days:</span> <span>--</span></div>
+        <div class="hours-row"><span>Absent Days:</span> <span>--</span></div>
+        <p style="font-size: 12px; color: #666; margin-top: 8px;">* Sync in progress</p>
     `;
     
     document.getElementById('leaveDisplay').innerHTML = `
-        <div class="hours-row"><span>Annual Leave:</span> <span>14 / 18 days</span></div>
-        <div class="hours-row"><span>Sick Leave:</span> <span>12 / 14 days</span></div>
-        <div class="hours-row"><span>Casual Leave:</span> <span>7 / 7 days</span></div>
+        <div class="hours-row"><span>Annual Leave:</span> <span>-- / 14 days</span></div>
+        <div class="hours-row"><span>Sick Leave:</span> <span>-- / 14 days</span></div>
     `;
 }
 
-// Check if employee is currently checked in
 async function checkCurrentStatus() {
     try {
         const today = new Date().toISOString().split('T')[0];
         const baseUrl = config.apiUrl.replace(/\/$/, '');
         const response = await fetch(
             `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20desc&limit=1`,
-            {
-                headers: { 'Authorization': `Bearer ${sessionToken}` }
-            }
+            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
         );
         
         if (response.ok) {
@@ -361,7 +344,6 @@ async function checkCurrentStatus() {
     }
 }
 
-// Update button based on current status
 function updateButtonState() {
     const btn = document.getElementById('checkBtn');
     if (currentStatus === 'IN') {
@@ -373,14 +355,13 @@ function updateButtonState() {
     }
 }
 
-// Handle check in/out
 document.getElementById('checkBtn').addEventListener('click', async () => {
     if (!currentLocation) {
         showStatus('Location not available. Please enable GPS.', 'error');
         return;
     }
     
-    // Geofencing validation
+    // Geofencing validation using Shift Location from Shift Assignment
     if (config.siteLat && config.siteLng) {
         const distance = calculateDistance(
             currentLocation.latitude,
@@ -391,13 +372,13 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         
         if (distance > config.siteRadius) {
             showStatus(
-                `📍 You are ${Math.round(distance)}m from worksite. Allowed: ${config.siteRadius}m. Check-in denied.`,
+                `📍 You are ${Math.round(distance)}m from ${config.shiftLocationName || 'worksite'}. Allowed: ${config.siteRadius}m. Check-in denied.`,
                 'error'
             );
             return;
         }
         
-        console.log(`✅ Distance to worksite: ${Math.round(distance)}m`);
+        console.log(`✅ Distance to ${config.shiftLocationName}: ${Math.round(distance)}m`);
     }
     
     const btn = document.getElementById('checkBtn');
@@ -408,7 +389,6 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     
     try {
         const baseUrl = config.apiUrl.replace(/\/$/, '');
-        
         const now = new Date();
         const timestamp = now.getFullYear() + '-' + 
             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -440,7 +420,6 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
             updateButtonState();
             showStatus(`✅ Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
             
-            // Refresh dashboard
             if (config.employmentType === 'Daily Wage') {
                 setTimeout(loadFieldWorkerDashboard, 1000);
             }
@@ -455,7 +434,6 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     }
 });
 
-// Placeholder functions for other features
 function applyLeave() {
     showStatus('Leave application feature coming soon!', 'info');
 }
@@ -497,7 +475,6 @@ function saveConfig() {
     showStatus('Configuration saved!', 'success');
 }
 
-// Show status message
 function showStatus(message, type) {
     const statusDiv = document.getElementById('statusMessage');
     statusDiv.className = `status ${type}`;
