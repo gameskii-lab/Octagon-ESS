@@ -452,11 +452,15 @@ function logout() {
 
 function showStatus(message, type) {
     const statusDiv = document.getElementById('statusMessage');
+    if (!statusDiv) return;
+    
     statusDiv.className = `status ${type}`;
     statusDiv.textContent = message;
     setTimeout(() => {
         statusDiv.textContent = '';
         statusDiv.className = '';
+    }, 5000);
+}
 
 // ============================================
 // NAVIGATION FUNCTIONS
