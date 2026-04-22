@@ -7,37 +7,151 @@
     <style>
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 400px;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* App Container */
+        .app-container {
+            max-width: 450px;
             margin: 0 auto;
-            padding: 16px;
+            background: white;
+            min-height: 100vh;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        }
+        
+        /* Header */
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: white;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .app-header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .menu-btn, .profile-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 4px 8px;
+            width: auto;
+        }
+        
+        /* Side Drawer */
+        .side-drawer {
+            position: fixed;
+            top: 0;
+            left: -280px;
+            width: 280px;
+            height: 100vh;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            transition: left 0.3s ease;
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        .side-drawer.open {
+            left: 0;
+        }
+        .drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            display: none;
+        }
+        .drawer-overlay.open {
+            display: block;
+        }
+        .drawer-header {
+            padding: 24px 20px;
+            background: linear-gradient(135deg, #2196F3, #1976D2);
+            color: white;
+        }
+        .drawer-header h3 {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+        .drawer-header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .drawer-menu {
+            padding: 12px 0;
+        }
+        .drawer-item {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            color: #333;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .drawer-item:hover {
             background: #f5f7fa;
         }
-        .container {
+        .drawer-item .icon {
+            margin-right: 16px;
+            font-size: 20px;
+            width: 24px;
+        }
+        
+        /* Main Content */
+        .main-content {
+            padding: 16px;
+        }
+        
+        /* Screen Management */
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+        
+        /* Login Screen */
+        .login-section {
+            padding: 32px 20px;
+        }
+        .login-section h3 {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        
+        /* Cards & UI Elements */
+        .card {
             background: white;
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid #eee;
         }
-        h1 {
-            margin: 0 0 4px 0;
-            font-size: 24px;
-        }
-        h2 {
-            margin: 16px 0 8px 0;
-            font-size: 18px;
-            color: #333;
-        }
-        h3 {
-            margin: 12px 0 8px 0;
+        .card-title {
             font-size: 16px;
-            color: #555;
-        }
-        .subtitle {
-            color: #666;
-            margin-bottom: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #333;
         }
         .employee-info {
             background: #e8f0fe;
@@ -117,15 +231,7 @@
             padding-top: 8px;
             margin-top: 8px;
         }
-        .login-section, .config-section, .app-section {
-            transition: all 0.3s;
-        }
-        .config-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-        }
-        input, button {
+        input, select, textarea, button {
             width: 100%;
             padding: 14px;
             margin: 8px 0;
@@ -173,83 +279,229 @@
         .flex-row button {
             flex: 1;
         }
+        
+        /* Leave Balance Summary */
+        .leave-balance-summary {
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .leave-type {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 12px;
+            flex: 1;
+            margin: 0 4px;
+        }
+        .leave-type .count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2196F3;
+        }
+        .leave-type .label {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* Leave List */
+        .leave-request-item {
+            background: #f8f9fa;
+            padding: 14px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+        .leave-status {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>⏰ Octagon ESS</h1>
-        <p class="subtitle" id="dateDisplay"></p>
+    <div class="app-container">
+        <!-- Side Drawer Overlay -->
+        <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
         
-        <!-- LOGIN SECTION (Shown initially) -->
-        <div id="loginSection" class="login-section">
-            <h3>Sign In</h3>
-            <input type="email" id="loginEmail" placeholder="Email" value="">
-            <input type="password" id="loginPassword" placeholder="Password" value="">
-            <button onclick="handleLogin()">Sign In</button>
-            <p style="text-align: center; margin-top: 16px; color: #666; font-size: 14px;">
-                Use your ERPNext credentials
-            </p>
+        <!-- Side Drawer -->
+        <div class="side-drawer" id="sideDrawer">
+            <div class="drawer-header">
+                <h3 id="drawerEmployeeName">Employee Name</h3>
+                <p id="drawerEmployeeDept">Department</p>
+            </div>
+            <div class="drawer-menu">
+                <div class="drawer-item" onclick="navigateTo('dashboard')">
+                    <span class="icon">📊</span> Dashboard
+                </div>
+                <div class="drawer-item" onclick="navigateTo('leave')">
+                    <span class="icon">🏖️</span> Leave
+                </div>
+                <div class="drawer-item" onclick="navigateTo('payslips')">
+                    <span class="icon">💰</span> Payslips
+                </div>
+                <div class="drawer-item" onclick="navigateTo('schedule')">
+                    <span class="icon">📋</span> Schedule
+                </div>
+                <div class="drawer-item" onclick="logout()">
+                    <span class="icon">🚪</span> Sign Out
+                </div>
+            </div>
         </div>
         
-        <!-- MAIN APP SECTION (Hidden until login) -->
-        <div id="appSection" class="app-section hidden">
-            <!-- Employee Info -->
-            <div class="employee-info" id="employeeInfo">
-                Loading...
-            </div>
-            
-            <!-- Worksite Info (Field Workers Only) -->
-            <div id="worksiteDisplay" class="worksite-info">
-                📍 Loading assignment...
-            </div>
-            
-            <!-- Check-In/Out Button (Field Workers Only) -->
-            <button class="check-btn check-in" id="checkBtn" disabled>
-                CHECK IN
-            </button>
-            
-            <!-- Location Display -->
-            <div id="locationDisplay" class="location">
-                📍 Getting location...
-            </div>
-            
-            <!-- Field Worker Dashboard (Hours & Timesheet) -->
-            <div id="fieldWorkerDashboard" class="hidden">
-                <h2>📊 Today's Hours</h2>
-                <div class="hours-card" id="hoursDisplay">
-                    Loading hours...
+        <!-- App Header -->
+        <div class="app-header">
+            <button class="menu-btn" onclick="openDrawer()">☰</button>
+            <h1 id="screenTitle">Dashboard</h1>
+            <button class="profile-btn" onclick="navigateTo('profile')">👤</button>
+        </div>
+        
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Login Screen -->
+            <div id="loginScreen" class="screen active">
+                <div class="login-section">
+                    <h3>Sign In</h3>
+                    <input type="email" id="loginEmail" placeholder="Email" value="">
+                    <input type="password" id="loginPassword" placeholder="Password" value="">
+                    <button onclick="handleLogin()">Sign In</button>
+                    <p style="text-align: center; margin-top: 16px; color: #666; font-size: 14px;">
+                        Use your ERPNext credentials
+                    </p>
                 </div>
-                <h2>📅 This Week</h2>
-                <div class="hours-card" id="weekHoursDisplay">
+            </div>
+            
+            <!-- Dashboard Screen -->
+            <div id="dashboardScreen" class="screen">
+                <div class="employee-info" id="employeeInfo">
                     Loading...
                 </div>
-            </div>
-            
-            <!-- Office Staff Dashboard (Attendance & Leave) -->
-            <div id="officeStaffDashboard" class="hidden">
-                <h2>📅 Monthly Attendance</h2>
-                <div class="attendance-card" id="attendanceDisplay">
-                    Loading attendance...
+                
+                <div id="worksiteDisplay" class="worksite-info">
+                    📍 Loading assignment...
                 </div>
-                <h2>🏖️ Leave Balance</h2>
-                <div class="leave-card" id="leaveDisplay">
-                    Loading leave balance...
+                
+                <button class="check-btn check-in" id="checkBtn" disabled>
+                    CHECK IN
+                </button>
+                
+                <div id="locationDisplay" class="location">
+                    📍 Getting location...
                 </div>
-                <button onclick="applyLeave()">📝 Apply for Leave</button>
+                
+                <!-- Field Worker Dashboard -->
+                <div id="fieldWorkerDashboard" class="hidden">
+                    <div class="card">
+                        <div class="card-title">📊 Today's Hours</div>
+                        <div id="hoursDisplay">Loading hours...</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">📅 This Week</div>
+                        <div id="weekHoursDisplay">Loading...</div>
+                    </div>
+                </div>
+                
+                <!-- Office Staff Dashboard -->
+                <div id="officeStaffDashboard" class="hidden">
+                    <div class="card">
+                        <div class="card-title">📅 Monthly Attendance</div>
+                        <div id="attendanceDisplay">Loading attendance...</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-title">🏖️ Quick Leave</div>
+                        <button onclick="navigateTo('leave')">Apply for Leave →</button>
+                    </div>
+                </div>
+                
+                <div id="statusMessage"></div>
             </div>
             
-            <!-- Common Actions -->
-            <h2>🔧 Quick Actions</h2>
-            <div class="flex-row">
-                <button onclick="viewPayslips()">💰 Payslips</button>
-                <button onclick="viewSchedule()">📋 Schedule</button>
+            <!-- Leave Screen -->
+            <div id="leaveScreen" class="screen">
+                <div class="card">
+                    <div class="card-title">🏖️ Leave Balance</div>
+                    <div class="leave-balance-summary" id="leaveBalanceSummary">
+                        Loading...
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">📝 Apply for Leave</div>
+                    <select id="leaveType">
+                        <option value="">Select Leave Type</option>
+                        <option value="Annual Leave">Annual Leave</option>
+                        <option value="Sick Leave">Sick Leave</option>
+                        <option value="Casual Leave">Casual Leave</option>
+                        <option value="Unpaid Leave">Unpaid Leave</option>
+                    </select>
+                    <label>From Date</label>
+                    <input type="date" id="leaveFromDate">
+                    <label>To Date</label>
+                    <input type="date" id="leaveToDate">
+                    <label>Half Day?</label>
+                    <select id="leaveHalfDay">
+                        <option value="0">No</option>
+                        <option value="1">First Half</option>
+                        <option value="2">Second Half</option>
+                    </select>
+                    <label>Reason</label>
+                    <textarea id="leaveReason" rows="3" placeholder="Reason for leave..."></textarea>
+                    <button onclick="submitLeaveApplication()">Submit Leave Request</button>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">📋 Recent Leave Requests</div>
+                    <div id="leaveRequestsList">
+                        Loading...
+                    </div>
+                </div>
+                
+                <div id="leaveStatusMessage"></div>
             </div>
             
-            <!-- Status Message -->
-            <div id="statusMessage"></div>
+            <!-- Payslips Screen -->
+            <div id="payslipsScreen" class="screen">
+                <div class="card">
+                    <div class="card-title">💰 Recent Payslips</div>
+                    <div id="payslipsList">
+                        <p style="color: #666; text-align: center;">Loading payslips...</p>
+                    </div>
+                </div>
+            </div>
             
-            <!-- Logout Button -->
-            <button class="logout-btn" onclick="logout()">🚪 Sign Out</button>
+            <!-- Schedule Screen -->
+            <div id="scheduleScreen" class="screen">
+                <div class="card">
+                    <div class="card-title">📋 Upcoming Schedule</div>
+                    <div id="scheduleList">
+                        <p style="color: #666; text-align: center;">Loading schedule...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Profile Screen -->
+            <div id="profileScreen" class="screen">
+                <div class="card">
+                    <div class="card-title">👤 Profile</div>
+                    <div id="profileInfo">
+                        Loading...
+                    </div>
+                </div>
+                <button class="logout-btn" onclick="logout()">🚪 Sign Out</button>
+            </div>
         </div>
     </div>
 
