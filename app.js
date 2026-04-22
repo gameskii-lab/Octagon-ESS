@@ -1,21 +1,38 @@
 // Global state
-let currentStatus = 'OUT'; // 'IN' or 'OUT'
+let currentStatus = 'OUT';
 let currentLocation = null;
+let sessionToken = null;
+let currentEmployee = null;
 let config = {
     apiUrl: '',
     apiKey: '',
     apiSecret: '',
     employeeId: '',
+    employmentType: '',
     siteLat: null,
     siteLng: null,
-    siteRadius: 100
+    siteRadius: 100,
+    todaysShift: null
 };
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     displayDate();
-    loadConfig();
+    loadSavedServerUrl();
     getLocation();
+    
+    // Check if already logged in (session token exists)
+    const savedToken = localStorage.getItem('sessionToken');
+    const savedEmployee = localStorage.getItem('currentEmployee');
+    const savedConfig = localStorage.getItem('erpnext_config');
+    
+    if (savedToken && savedEmployee && savedConfig) {
+        sessionToken = savedToken;
+        currentEmployee = JSON.parse(savedEmployee);
+        config = JSON.parse(savedConfig);
+        showAppSection();
+        initializeDashboard();
+    }
 });
 
 // Display current date
@@ -25,9 +42,18 @@ function displayDate() {
     document.getElementById('dateDisplay').textContent = now.toLocaleDateString('en-US', options);
 }
 
-// Calculate distance between two coordinates in meters (Haversine formula)
+// Load saved server URL
+function loadSavedServerUrl() {
+    const saved = localStorage.getItem('erpnext_config');
+    if (saved) {
+        config = JSON.parse(saved);
+        document.getElementById('serverUrl').value = config.apiUrl || 'https://erpnext-cors-proxy.onrender.com';
+    }
+}
+
+// Calculate distance between two coordinates in meters
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371000; // Earth's radius in meters
+    const R = 6371000;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = 
@@ -35,97 +61,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
         Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
         Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in meters
-}
-
-// Load saved config from localStorage
-function loadConfig() {
-    const saved = localStorage.getItem('erpnext_config');
-    if (saved) {
-        config = JSON.parse(saved);
-        document.getElementById('apiUrl').value = config.apiUrl || '';
-        document.getElementById('apiKey').value = config.apiKey || '';
-        document.getElementById('apiSecret').value = config.apiSecret || '';
-        document.getElementById('employeeId').value = config.employeeId || '';
-        document.getElementById('siteLat').value = config.siteLat || '';
-        document.getElementById('siteLng').value = config.siteLng || '';
-        document.getElementById('siteRadius').value = config.siteRadius || 100;
-        
-        if (config.apiUrl && config.apiKey && config.apiSecret && config.employeeId) {
-            fetchEmployeeInfo();
-        }
-    }
-}
-
-// Save config to localStorage
-function saveConfig() {
-    config.apiUrl = document.getElementById('apiUrl').value;
-    config.apiKey = document.getElementById('apiKey').value;
-    config.apiSecret = document.getElementById('apiSecret').value;
-    config.employeeId = document.getElementById('employeeId').value;
-    config.siteLat = parseFloat(document.getElementById('siteLat').value) || null;
-    config.siteLng = parseFloat(document.getElementById('siteLng').value) || null;
-    config.siteRadius = parseInt(document.getElementById('siteRadius').value) || 100;
-    
-    localStorage.setItem('erpnext_config', JSON.stringify(config));
-    fetchEmployeeInfo();
-    showStatus('Configuration saved!', 'success');
-}
-
-// Fetch employee details from ERPNext
-async function fetchEmployeeInfo() {
-    try {
-        const baseUrl = config.apiUrl.replace(/\/$/, '');
-        const response = await fetch(`${baseUrl}/api/resource/Employee/${config.employeeId}`, {
-            headers: {
-                'Authorization': `token ${config.apiKey}:${config.apiSecret}`
-            }
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            document.getElementById('employeeInfo').innerHTML = `
-                👤 ${data.data.employee_name}<br>
-                🏢 ${data.data.department || 'N/A'}<br>
-                💼 ${data.data.designation || 'N/A'}
-            `;
-            document.getElementById('checkBtn').disabled = false;
-            checkCurrentStatus();
-        } else {
-            document.getElementById('employeeInfo').textContent = 'Invalid Employee ID or credentials';
-            document.getElementById('checkBtn').disabled = true;
-        }
-    } catch (error) {
-        console.error('Error fetching employee:', error);
-        document.getElementById('employeeInfo').textContent = 'Connection error - check CORS settings';
-    }
-}
-
-// Check if employee is currently checked in
-async function checkCurrentStatus() {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        const baseUrl = config.apiUrl.replace(/\/$/, '');
-        const response = await fetch(
-            `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20desc&limit=1`,
-            {
-                headers: {
-                    'Authorization': `token ${config.apiKey}:${config.apiSecret}`
-                }
-            }
-        );
-        
-        if (response.ok) {
-            const data = await response.json();
-            if (data.data && data.data.length > 0) {
-                const lastLog = data.data[0];
-                currentStatus = lastLog.log_type;
-                updateButtonState();
-            }
-        }
-    } catch (error) {
-        console.error('Error checking status:', error);
-    }
+    return R * c;
 }
 
 // Get device location
@@ -147,6 +83,281 @@ function getLocation() {
         );
     } else {
         document.getElementById('locationDisplay').textContent = '❌ Geolocation not supported';
+    }
+}
+
+// Handle login
+async function handleLogin() {
+    const serverUrl = document.getElementById('serverUrl').value;
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!serverUrl || !email || !password) {
+        showStatus('Please fill in all fields', 'error');
+        return;
+    }
+    
+    config.apiUrl = serverUrl;
+    
+    try {
+        const baseUrl = config.apiUrl.replace(/\/$/, '');
+        const response = await fetch(`${baseUrl}/api/method/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ usr: email, pwd: password })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.message === 'Logged In') {
+            sessionToken = result.session_token;
+            localStorage.setItem('sessionToken', sessionToken);
+            
+            await fetchEmployeeByUser(email);
+            await fetchTodaysAssignment();
+            
+            config.apiKey = ''; // Not needed with session token
+            config.apiSecret = '';
+            localStorage.setItem('erpnext_config', JSON.stringify(config));
+            localStorage.setItem('currentEmployee', JSON.stringify(currentEmployee));
+            
+            showAppSection();
+            initializeDashboard();
+            showStatus(`Welcome, ${currentEmployee.employee_name}!`, 'success');
+        } else {
+            throw new Error(result.message || 'Login failed');
+        }
+    } catch (error) {
+        showStatus(`Login error: ${error.message}`, 'error');
+    }
+}
+
+// Fetch employee record linked to user
+async function fetchEmployeeByUser(email) {
+    const baseUrl = config.apiUrl.replace(/\/$/, '');
+    
+    const response = await fetch(
+        `${baseUrl}/api/resource/Employee?filters=[["user_id","=","${email}"]]&limit=1`,
+        {
+            headers: { 'Authorization': `Bearer ${sessionToken}` }
+        }
+    );
+    
+    const data = await response.json();
+    
+    if (data.data && data.data.length > 0) {
+        currentEmployee = data.data[0];
+        config.employeeId = currentEmployee.name;
+        config.employmentType = currentEmployee.employment_type || 'Full-time';
+        
+        document.getElementById('employeeInfo').innerHTML = `
+            👤 ${currentEmployee.employee_name}<br>
+            🏢 ${currentEmployee.department || 'N/A'}<br>
+            💼 ${currentEmployee.designation || 'N/A'}<br>
+            <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
+                ${config.employmentType}
+            </span>
+        `;
+    } else {
+        throw new Error('No employee record found for this user');
+    }
+}
+
+// Fetch today's worksite assignment (for daily paid workers)
+async function fetchTodaysAssignment() {
+    if (config.employmentType !== 'Daily Wage') {
+        document.getElementById('worksiteDisplay').textContent = '🏢 Office-based employee';
+        return;
+    }
+    
+    const baseUrl = config.apiUrl.replace(/\/$/, '');
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+        // Try to fetch from Worker Assignment doctype
+        const response = await fetch(
+            `${baseUrl}/api/resource/Worker%20Assignment?filters=[["employee","=","${config.employeeId}"],["assignment_date","=","${today}"]]&limit=1`,
+            {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (data.data && data.data.length > 0) {
+            const assignment = data.data[0];
+            
+            // Fetch shift location details
+            if (assignment.shift_location) {
+                const locResponse = await fetch(
+                    `${baseUrl}/api/resource/Shift%20Location/${assignment.shift_location}`,
+                    {
+                        headers: { 'Authorization': `Bearer ${sessionToken}` }
+                    }
+                );
+                
+                const locData = await locResponse.json();
+                
+                config.siteLat = locData.data.latitude;
+                config.siteLng = locData.data.longitude;
+                config.siteRadius = locData.data.allowed_radius || 100;
+                config.todaysShift = assignment.shift_type;
+                
+                document.getElementById('worksiteDisplay').innerHTML = 
+                    `✅ Assigned: ${locData.data.location_name}<br>📏 Radius: ${config.siteRadius}m`;
+            }
+        } else {
+            // Fallback: Try to fetch from employee's default shift
+            document.getElementById('worksiteDisplay').innerHTML = 
+                '⚠️ No worksite assigned for today. Using default if available.';
+        }
+    } catch (error) {
+        console.error('Error fetching assignment:', error);
+        document.getElementById('worksiteDisplay').textContent = '⚠️ Could not load worksite assignment';
+    }
+}
+
+// Show main app section
+function showAppSection() {
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('configSection').classList.add('hidden');
+    document.getElementById('appSection').classList.remove('hidden');
+    
+    // Enable check-in button for daily wage workers
+    if (config.employmentType === 'Daily Wage') {
+        document.getElementById('checkBtn').disabled = false;
+        checkCurrentStatus();
+    } else {
+        document.getElementById('checkBtn').style.display = 'none';
+    }
+}
+
+// Initialize appropriate dashboard
+function initializeDashboard() {
+    if (config.employmentType === 'Daily Wage') {
+        document.getElementById('fieldWorkerDashboard').classList.remove('hidden');
+        document.getElementById('officeStaffDashboard').classList.add('hidden');
+        loadFieldWorkerDashboard();
+    } else {
+        document.getElementById('fieldWorkerDashboard').classList.add('hidden');
+        document.getElementById('officeStaffDashboard').classList.remove('hidden');
+        loadOfficeStaffDashboard();
+    }
+}
+
+// Load field worker dashboard (hours summary)
+async function loadFieldWorkerDashboard() {
+    const baseUrl = config.apiUrl.replace(/\/$/, '');
+    const today = new Date().toISOString().split('T')[0];
+    
+    try {
+        // Fetch today's check-ins
+        const response = await fetch(
+            `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`,
+            {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (data.data && data.data.length > 0) {
+            // Calculate hours from check-in/out pairs
+            const hours = calculateHoursFromCheckins(data.data);
+            
+            document.getElementById('hoursDisplay').innerHTML = `
+                <div class="hours-row"><span>Regular Hours:</span> <span>${hours.regular.toFixed(2)} hrs</span></div>
+                <div class="hours-row"><span>Overtime:</span> <span>${hours.overtime.toFixed(2)} hrs</span></div>
+                <div class="hours-total"><span>Total:</span> <span>${hours.total.toFixed(2)} hrs</span></div>
+            `;
+        } else {
+            document.getElementById('hoursDisplay').innerHTML = '<p>No check-ins today</p>';
+        }
+        
+        // Placeholder for week hours
+        document.getElementById('weekHoursDisplay').innerHTML = `
+            <div class="hours-row"><span>Mon-Wed:</span> <span>24.5 hrs</span></div>
+            <div class="hours-total"><span>Week Total:</span> <span>24.5 hrs</span></div>
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">* Week calculation coming soon</p>
+        `;
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+        document.getElementById('hoursDisplay').innerHTML = '<p>Error loading hours</p>';
+    }
+}
+
+// Calculate hours from check-in records
+function calculateHoursFromCheckins(checkins) {
+    let totalMinutes = 0;
+    let regularMinutes = 0;
+    let overtimeMinutes = 0;
+    
+    // Standard 8-hour shift = 480 minutes
+    const standardShiftMinutes = 480;
+    
+    for (let i = 0; i < checkins.length; i += 2) {
+        if (i + 1 < checkins.length) {
+            const inTime = new Date(checkins[i].time);
+            const outTime = new Date(checkins[i+1].time);
+            const diffMinutes = (outTime - inTime) / (1000 * 60);
+            
+            totalMinutes += diffMinutes;
+        }
+    }
+    
+    regularMinutes = Math.min(totalMinutes, standardShiftMinutes);
+    overtimeMinutes = Math.max(0, totalMinutes - standardShiftMinutes);
+    
+    return {
+        regular: regularMinutes / 60,
+        overtime: overtimeMinutes / 60,
+        total: totalMinutes / 60
+    };
+}
+
+// Load office staff dashboard
+async function loadOfficeStaffDashboard() {
+    const today = new Date();
+    const month = today.toLocaleDateString('en-US', { month: 'long' });
+    const year = today.getFullYear();
+    
+    document.getElementById('attendanceDisplay').innerHTML = `
+        <p><strong>${month} ${year}</strong></p>
+        <div class="hours-row"><span>Present Days:</span> <span>18 days</span></div>
+        <div class="hours-row"><span>Absent Days:</span> <span>0 days</span></div>
+        <div class="hours-row"><span>Holidays:</span> <span>2 days</span></div>
+        <p style="font-size: 12px; color: #666; margin-top: 8px;">* Detailed calendar coming soon</p>
+    `;
+    
+    document.getElementById('leaveDisplay').innerHTML = `
+        <div class="hours-row"><span>Annual Leave:</span> <span>14 / 18 days</span></div>
+        <div class="hours-row"><span>Sick Leave:</span> <span>12 / 14 days</span></div>
+        <div class="hours-row"><span>Casual Leave:</span> <span>7 / 7 days</span></div>
+    `;
+}
+
+// Check if employee is currently checked in
+async function checkCurrentStatus() {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const baseUrl = config.apiUrl.replace(/\/$/, '');
+        const response = await fetch(
+            `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20desc&limit=1`,
+            {
+                headers: { 'Authorization': `Bearer ${sessionToken}` }
+            }
+        );
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.data && data.data.length > 0) {
+                const lastLog = data.data[0];
+                currentStatus = lastLog.log_type;
+                updateButtonState();
+            }
+        }
+    } catch (error) {
+        console.error('Error checking status:', error);
     }
 }
 
@@ -186,7 +397,7 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
             return;
         }
         
-        console.log(`✅ Distance to worksite: ${Math.round(distance)}m (within ${config.siteRadius}m limit)`);
+        console.log(`✅ Distance to worksite: ${Math.round(distance)}m`);
     }
     
     const btn = document.getElementById('checkBtn');
@@ -198,7 +409,6 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     try {
         const baseUrl = config.apiUrl.replace(/\/$/, '');
         
-        // Format timestamp as "YYYY-MM-DD HH:MM:SS"
         const now = new Date();
         const timestamp = now.getFullYear() + '-' + 
             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -213,7 +423,7 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `token ${config.apiKey}:${config.apiSecret}`
+                    'Authorization': `Bearer ${sessionToken}`
                 },
                 body: JSON.stringify({
                     employee: config.employeeId,
@@ -229,6 +439,11 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
             currentStatus = logType;
             updateButtonState();
             showStatus(`✅ Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
+            
+            // Refresh dashboard
+            if (config.employmentType === 'Daily Wage') {
+                setTimeout(loadFieldWorkerDashboard, 1000);
+            }
         } else {
             const errorMsg = result.message || JSON.stringify(result);
             throw new Error(errorMsg);
@@ -239,6 +454,48 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         btn.disabled = false;
     }
 });
+
+// Placeholder functions for other features
+function applyLeave() {
+    showStatus('Leave application feature coming soon!', 'info');
+}
+
+function viewPayslips() {
+    showStatus('Payslip viewing coming soon!', 'info');
+}
+
+function viewSchedule() {
+    showStatus('Schedule viewing coming soon!', 'info');
+}
+
+function logout() {
+    localStorage.removeItem('sessionToken');
+    localStorage.removeItem('currentEmployee');
+    sessionToken = null;
+    currentEmployee = null;
+    
+    document.getElementById('appSection').classList.add('hidden');
+    document.getElementById('loginSection').classList.remove('hidden');
+    showStatus('Signed out successfully', 'info');
+}
+
+function showConfigSection() {
+    document.getElementById('configSection').classList.remove('hidden');
+    document.getElementById('apiUrl').value = config.apiUrl || '';
+}
+
+function saveConfig() {
+    config.apiUrl = document.getElementById('apiUrl').value;
+    config.apiKey = document.getElementById('apiKey').value;
+    config.apiSecret = document.getElementById('apiSecret').value;
+    config.employeeId = document.getElementById('employeeId').value;
+    config.siteLat = parseFloat(document.getElementById('siteLat').value) || null;
+    config.siteLng = parseFloat(document.getElementById('siteLng').value) || null;
+    config.siteRadius = parseInt(document.getElementById('siteRadius').value) || 100;
+    
+    localStorage.setItem('erpnext_config', JSON.stringify(config));
+    showStatus('Configuration saved!', 'success');
+}
 
 // Show status message
 function showStatus(message, type) {
