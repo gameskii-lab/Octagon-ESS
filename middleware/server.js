@@ -2,6 +2,14 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
+// 🔥 DEBUG: Log startup
+console.log('=== SERVER STARTING ===');
+console.log('Node version:', process.version);
+console.log('Environment PORT:', process.env.PORT);
+console.log('ERP_URL:', process.env.ERP_URL || 'https://erp.octagonerp.net');
+console.log('API_KEY configured:', process.env.API_KEY ? 'YES' : 'NO');
+console.log('API_SECRET configured:', process.env.API_SECRET ? 'YES' : 'NO');
+
 // Enhanced CORS configuration
 const corsOptions = {
     origin: ['https://octagon-ess.onrender.com', 'http://localhost:3000', 'http://127.0.0.1:5500'],
@@ -11,11 +19,19 @@ const corsOptions = {
     optionsSuccessStatus: 200
 };
 
+console.log('CORS allowed origins:', corsOptions.origin);
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
 // Explicitly handle preflight requests
 app.options('*', cors(corsOptions));
+
+// 🔥 DEBUG: Log every incoming request
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
+    next();
+});
 
 // Configuration
 const ERP_URL = process.env.ERP_URL || 'https://erp.octagonerp.net';
@@ -62,6 +78,20 @@ app.post('/api/login', async (req, res) => {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Server error during login' });
     }
+});
+
+// 🔥 TEMPORARY TEST ENDPOINT - No CORS restrictions
+app.get('/ping', (req, res) => {
+    console.log('Ping received!');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ pong: true, time: new Date().toISOString() });
+});
+
+// 🔥 TEMPORARY: Test POST endpoint
+app.post('/ping', (req, res) => {
+    console.log('POST Ping received!', req.body);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ pong: true, received: req.body });
 });
 
 // Get employee record
