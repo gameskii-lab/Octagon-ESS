@@ -570,32 +570,31 @@ async function loadLeaveScreen() {
 
 async function loadLeaveBalance() {
     try {
-        // Fetch leave balance from ERPNext via middleware
         const response = await fetch(`${config.middlewareUrl}/api/leave-balance/${config.employeeId}`);
         const result = await response.json();
         
-        if (result.success && result.balances) {
+        if (result.success && result.balances && result.balances.length > 0) {
             let html = '';
             result.balances.forEach(b => {
+                const remaining = (b.leaves_allocated || 0) - (b.leaves_taken || 0);
                 html += `
                     <div class="leave-type">
-                        <div class="count">${b.leaves_allocated - b.leaves_taken}</div>
+                        <div class="count">${remaining}</div>
                         <div class="label">${b.leave_type}</div>
                     </div>
                 `;
             });
-            document.getElementById('leaveBalanceSummary').innerHTML = html || '<p>No leave allocations found</p>';
+            document.getElementById('leaveBalanceSummary').innerHTML = html;
+        } else if (result.success && result.balances && result.balances.length === 0) {
+            // API returned successfully but no allocations exist
+            document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">No leave allocations found</p>';
         } else {
-            // Fallback - show default
-            document.getElementById('leaveBalanceSummary').innerHTML = `
-                <div class="leave-type"><div class="count">--</div><div class="label">Annual</div></div>
-                <div class="leave-type"><div class="count">--</div><div class="label">Sick</div></div>
-                <div class="leave-type"><div class="count">--</div><div class="label">Casual</div></div>
-            `;
+            // API error or other issue
+            document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">Unable to load leave balance</p>';
         }
     } catch (error) {
         console.error('Error loading leave balance:', error);
-        document.getElementById('leaveBalanceSummary').innerHTML = '<p>Error loading balance</p>';
+        document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">Error loading balance</p>';
     }
 }
 
