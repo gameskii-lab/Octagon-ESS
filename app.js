@@ -479,13 +479,20 @@ function logout() {
 
 function showStatus(message, type) {
     const statusDiv = document.getElementById('statusMessage');
-    if (!statusDiv) return;
+    
+    // If status div doesn't exist (e.g., on login screen), just console.log
+    if (!statusDiv) {
+        console.log(`[${type}] ${message}`);
+        return;
+    }
     
     statusDiv.className = `status ${type}`;
     statusDiv.textContent = message;
     setTimeout(() => {
-        statusDiv.textContent = '';
-        statusDiv.className = '';
+        if (statusDiv) {
+            statusDiv.textContent = '';
+            statusDiv.className = '';
+        }
     }, 5000);
 }
 
