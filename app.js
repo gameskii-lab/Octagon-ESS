@@ -129,6 +129,8 @@ async function handleLogin() {
         config.employeeId = currentEmployee.id;
         config.employmentType = currentEmployee.employment_type || 'Full-time';
         userEmail = email;
+
+        updateDraweInfo();
         
         // Store for persistence
         localStorage.setItem('erpnext_config', JSON.stringify(config));
@@ -198,21 +200,24 @@ async function fetchTodaysShiftAssignment() {
 
 // Show main app section - CORRECTED VERSION
 function showAppSection() {
-    const loginSection = document.getElementById('loginSection');
-    const appSection = document.getElementById('appSection');
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboardScreen = document.getElementById('dashboardScreen');
     
-    if (loginSection) loginSection.classList.add('hidden');
-    if (appSection) appSection.classList.remove('hidden');
+    if (loginScreen) loginScreen.classList.remove('active');
+    if (dashboardScreen) dashboardScreen.classList.add('active');
+    
+    document.getElementById('screenTitle').textContent = 'Dashboard';
+    
+    // Update drawer info
+    updateDrawerInfo();
     
     // Show check-in button ONLY for Daily Wage employees
     const checkBtn = document.getElementById('checkBtn');
     const worksiteEl = document.getElementById('worksiteDisplay');
     
     if (config.employmentType === 'Daily Wage') {
-        // Field worker - show check-in button
         if (checkBtn) checkBtn.style.display = 'block';
     } else {
-        // Office staff - hide check-in button
         if (checkBtn) checkBtn.style.display = 'none';
         if (worksiteEl) worksiteEl.textContent = '🏢 Office-based employee';
     }
@@ -411,6 +416,7 @@ function viewSchedule() {
 }
 
 function logout() {
+    closeDrawer();
     localStorage.removeItem('erpnext_config');
     localStorage.removeItem('currentEmployee');
     localStorage.removeItem('userEmail');
@@ -419,8 +425,14 @@ function logout() {
     userEmail = '';
     config.employeeId = '';
     
-    document.getElementById('appSection').classList.add('hidden');
-    document.getElementById('loginSection').classList.remove('hidden');
+    // Hide all screens, show login
+    const screens = ['dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
+    screens.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    document.getElementById('loginScreen').classList.add('active');
+    document.getElementById('screenTitle').textContent = 'Sign In';
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
     
@@ -434,5 +446,233 @@ function showStatus(message, type) {
     setTimeout(() => {
         statusDiv.textContent = '';
         statusDiv.className = '';
+
+// ============================================
+// NAVIGATION FUNCTIONS
+// ============================================
+
+function openDrawer() {
+    document.getElementById('sideDrawer').classList.add('open');
+    document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() {
+    document.getElementById('sideDrawer').classList.remove('open');
+    document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+function navigateTo(screen) {
+    closeDrawer();
+    
+    // Hide all screens
+    const screens = ['loginScreen', 'dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
+    screens.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    
+    // Show selected screen
+    const activeScreen = document.getElementById(screen + 'Screen');
+    if (activeScreen) activeScreen.classList.add('active');
+    
+    // Update header title
+    const titles = {
+        'dashboard': 'Dashboard',
+        'leave': 'Leave',
+        'payslips': 'Payslips',
+        'schedule': 'Schedule',
+        'profile': 'Profile'
+    };
+    document.getElementById('screenTitle').textContent = titles[screen] || 'Octagon ESS';
+    
+    // Load screen-specific data
+    if (screen === 'leave') {
+        loadLeaveScreen();
+    } else if (screen === 'payslips') {
+        loadPayslipsScreen();
+    } else if (screen === 'schedule') {
+        loadScheduleScreen();
+    } else if (screen === 'profile') {
+        loadProfileScreen();
+    }
+}
     }, 5000);
+}
+
+function updateDrawerInfo() {
+    const employeeName = currentEmployee?.name || currentEmployee?.employee_name || 'Employee';
+    document.getElementById('drawerEmployeeName').textContent = employeeName;
+    document.getElementById('drawerEmployeeDept').textContent = currentEmployee?.department || 'N/A';
+}
+// ============================================
+// LEAVE FUNCTIONS
+// ============================================
+
+async function loadLeaveScreen() {
+    if (!config.employeeId) return;
+    await loadLeaveBalance();
+    await loadLeaveRequests();
+}
+
+async function loadLeaveBalance() {
+    try {
+        // Fetch leave balance from ERPNext via middleware
+        const response = await fetch(`${config.middlewareUrl}/api/leave-balance/${config.employeeId}`);
+        const result = await response.json();
+        
+        if (result.success && result.balances) {
+            let html = '';
+            result.balances.forEach(b => {
+                html += `
+                    <div class="leave-type">
+                        <div class="count">${b.leaves_allocated - b.leaves_taken}</div>
+                        <div class="label">${b.leave_type}</div>
+                    </div>
+                `;
+            });
+            document.getElementById('leaveBalanceSummary').innerHTML = html || '<p>No leave allocations found</p>';
+        } else {
+            // Fallback - show default
+            document.getElementById('leaveBalanceSummary').innerHTML = `
+                <div class="leave-type"><div class="count">--</div><div class="label">Annual</div></div>
+                <div class="leave-type"><div class="count">--</div><div class="label">Sick</div></div>
+                <div class="leave-type"><div class="count">--</div><div class="label">Casual</div></div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading leave balance:', error);
+        document.getElementById('leaveBalanceSummary').innerHTML = '<p>Error loading balance</p>';
+    }
+}
+
+async function loadLeaveRequests() {
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/leave-requests/${config.employeeId}`);
+        const result = await response.json();
+        
+        if (result.success && result.requests && result.requests.length > 0) {
+            let html = '';
+            result.requests.slice(0, 5).forEach(req => {
+                const statusClass = req.status === 'Approved' ? 'status-approved' : 
+                                   (req.status === 'Rejected' ? 'status-rejected' : 'status-pending');
+                html += `
+                    <div class="leave-request-item">
+                        <div style="display: flex; justify-content: space-between;">
+                            <strong>${req.leave_type}</strong>
+                            <span class="leave-status ${statusClass}">${req.status}</span>
+                        </div>
+                        <div style="font-size: 14px; color: #666; margin-top: 4px;">
+                            ${req.from_date} to ${req.to_date}
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('leaveRequestsList').innerHTML = html;
+        } else {
+            document.getElementById('leaveRequestsList').innerHTML = '<p style="color: #666;">No leave requests found</p>';
+        }
+    } catch (error) {
+        console.error('Error loading leave requests:', error);
+        document.getElementById('leaveRequestsList').innerHTML = '<p>Error loading requests</p>';
+    }
+}
+
+async function submitLeaveApplication() {
+    const leaveType = document.getElementById('leaveType').value;
+    const fromDate = document.getElementById('leaveFromDate').value;
+    const toDate = document.getElementById('leaveToDate').value;
+    const halfDay = document.getElementById('leaveHalfDay').value;
+    const reason = document.getElementById('leaveReason').value;
+    
+    if (!leaveType || !fromDate || !toDate || !reason) {
+        showLeaveStatus('Please fill all fields', 'error');
+        return;
+    }
+    
+    const submitBtn = document.querySelector('#leaveScreen button');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/leave-application`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                employeeId: config.employeeId,
+                leaveType: leaveType,
+                fromDate: fromDate,
+                toDate: toDate,
+                halfDay: halfDay !== '0',
+                halfDayDate: halfDay !== '0' ? fromDate : null,
+                reason: reason
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showLeaveStatus('✅ Leave request submitted successfully!', 'success');
+            // Clear form
+            document.getElementById('leaveType').value = '';
+            document.getElementById('leaveFromDate').value = '';
+            document.getElementById('leaveToDate').value = '';
+            document.getElementById('leaveHalfDay').value = '0';
+            document.getElementById('leaveReason').value = '';
+            // Refresh list
+            await loadLeaveRequests();
+        } else {
+            throw new Error(result.error || 'Failed to submit');
+        }
+    } catch (error) {
+        showLeaveStatus(`❌ Error: ${error.message}`, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Leave Request';
+    }
+}
+
+function showLeaveStatus(message, type) {
+    const statusDiv = document.getElementById('leaveStatusMessage');
+    statusDiv.className = `status ${type}`;
+    statusDiv.textContent = message;
+    setTimeout(() => {
+        statusDiv.textContent = '';
+        statusDiv.className = '';
+    }, 5000);
+}
+// ============================================
+// OTHER SCREEN FUNCTIONS (Placeholders)
+// ============================================
+
+function loadPayslipsScreen() {
+    document.getElementById('payslipsList').innerHTML = `
+        <p style="color: #666; text-align: center; padding: 20px;">
+            💰 Payslip viewing coming soon!<br>
+            <small>Check back in the next update</small>
+        </p>
+    `;
+}
+
+function loadScheduleScreen() {
+    document.getElementById('scheduleList').innerHTML = `
+        <p style="color: #666; text-align: center; padding: 20px;">
+            📋 Schedule view coming soon!<br>
+            <small>Your upcoming shifts will appear here</small>
+        </p>
+    `;
+}
+
+function loadProfileScreen() {
+    const employeeName = currentEmployee?.name || currentEmployee?.employee_name || 'Employee';
+    document.getElementById('profileInfo').innerHTML = `
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 48px; margin-bottom: 10px;">👤</div>
+            <h3>${employeeName}</h3>
+            <p style="color: #666;">${currentEmployee?.designation || 'N/A'}</p>
+        </div>
+        <div class="hours-row"><span>Employee ID:</span> <span>${config.employeeId}</span></div>
+        <div class="hours-row"><span>Department:</span> <span>${currentEmployee?.department || 'N/A'}</span></div>
+        <div class="hours-row"><span>Employment Type:</span> <span>${config.employmentType}</span></div>
+        <div class="hours-row"><span>Email:</span> <span>${userEmail}</span></div>
+    `;
 }
