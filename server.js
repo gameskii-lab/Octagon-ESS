@@ -243,6 +243,35 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
     }
 });
 
+// Get leave balance for an employee
+app.get('/api/leave-balance/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["leave_type","total_leaves_allocated","leaves_taken"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        
+        const data = await response.json();
+        
+        const balances = (data.data || []).map(alloc => ({
+            leave_type: alloc.leave_type,
+            leaves_allocated: alloc.total_leaves_allocated || 0,
+            leaves_taken: alloc.leaves_taken || 0
+        }));
+        
+        res.json({ success: true, balances });
+    } catch (error) {
+        console.error('Leave balance error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // 404 handler for undefined routes
 app.use((req, res) => {
     console.log(`404 - Route not found: ${req.method} ${req.path}`);
@@ -254,4 +283,77 @@ app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`📍 ERP_URL: ${ERP_URL}`);
     console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO'}`);
+});
+// Get leave requests for an employee
+app.get('/api/leave-requests/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"]]&fields=["leave_type","from_date","to_date","status","total_leave_days"]&order_by=creation%20desc&limit=10`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        
+        const data = await response.json();
+        res.json({ success: true, requests: data.data || [] });
+    } catch (error) {
+        console.error('Leave requests error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+// Submit leave application
+app.post('/api/leave-application', async (req, res) => {
+    const { employeeId, leaveType, fromDate, toDate, halfDay, halfDayDate, reason } = req.body;
+    
+    if (!employeeId || !leaveType || !fromDate || !toDate) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const payload = {
+            employee: employeeId,
+            leave_type: leaveType,
+            from_date: fromDate,
+            to_date: toDate,
+            description: reason || 'Applied via ESS',
+            leave_approver: '', // ERPNext will auto-assign based on workflow
+            status: 'Open'
+        };
+        
+        if (halfDay) {
+            payload.half_day = 1;
+            payload.half_day_date = halfDayDate || fromDate;
+        }
+        
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Application`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `token ${API_KEY}:${API_SECRET}`
+                },
+                body: JSON.stringify(payload)
+            }
+        );
+        
+        const result = await response.json();
+        
+        if (response.ok && result.data) {
+            res.json({ success: true, data: result.data });
+        } else {
+            res.status(400).json({ error: result.message || 'Failed to submit leave application' });
+        }
+    } catch (error) {
+        console.error('Leave application error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
