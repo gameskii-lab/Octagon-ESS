@@ -24,7 +24,7 @@ const API_SECRET = process.env.API_SECRET || '';
 app.get('/', (req, res) => {
     res.json({ 
         status: 'Octagon ESS Middleware Running',
-        version: '1.0.0',
+        version: '1.0.1',
         endpoints: [
             '/ping',
             '/api/login',
@@ -87,11 +87,20 @@ app.get('/api/employee/:email', async (req, res) => {
         
         if (data.data && data.data.length > 0) {
             const emp = data.data[0];
+            
+            // Handle different possible name fields in ERPNext
+            const employeeName = emp.employee_name || 
+                                emp.name || 
+                                (emp.first_name && emp.last_name ? 
+                                 `${emp.first_name} ${emp.last_name}` : 
+                                 'Employee');
+            
             res.json({
                 success: true,
                 employee: {
                     id: emp.name,
-                    name: emp.employee_name,
+                    name: employeeName,
+                    employee_name: employeeName, // Include both for compatibility
                     department: emp.department || 'N/A',
                     designation: emp.designation || 'N/A',
                     employment_type: emp.employment_type || 'Full-time'
