@@ -21,13 +21,12 @@ const corsOptions = {
 
 console.log('CORS allowed origins:', corsOptions.origin);
 
+// IMPORTANT: Apply CORS before routes
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
-// Explicitly handle preflight requests
-app.options('*', cors(corsOptions));
-
-// 🔥 DEBUG: Log every incoming request
+// 🔥 Log every incoming request
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
     next();
@@ -38,16 +37,29 @@ const ERP_URL = process.env.ERP_URL || 'https://erp.octagonerp.net';
 const API_KEY = process.env.API_KEY || '';
 const API_SECRET = process.env.API_SECRET || '';
 
+// 🔥 TEST ENDPOINTS - These should always work
+app.get('/ping', (req, res) => {
+    console.log('GET /ping received');
+    res.json({ pong: true, time: new Date().toISOString() });
+});
+
+app.post('/ping', (req, res) => {
+    console.log('POST /ping received', req.body);
+    res.json({ pong: true, received: req.body });
+});
+
 // Health check endpoint
 app.get('/', (req, res) => {
+    console.log('GET / received');
     res.json({ 
         status: 'ERPNext Middleware Running',
-        endpoints: ['/api/login', '/api/employee/:email', '/api/shift-assignment/:employeeId', '/api/checkin', '/api/today-checkins/:employeeId']
+        endpoints: ['/ping', '/api/login', '/api/employee/:email', '/api/shift-assignment/:employeeId', '/api/checkin', '/api/today-checkins/:employeeId']
     });
 });
 
 // Login endpoint
 app.post('/api/login', async (req, res) => {
+    console.log('POST /api/login received');
     const { email, password } = req.body;
     
     if (!email || !password) {
@@ -80,22 +92,9 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// 🔥 TEMPORARY TEST ENDPOINT - No CORS restrictions
-app.get('/ping', (req, res) => {
-    console.log('Ping received!');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.json({ pong: true, time: new Date().toISOString() });
-});
-
-// 🔥 TEMPORARY: Test POST endpoint
-app.post('/ping', (req, res) => {
-    console.log('POST Ping received!', req.body);
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.json({ pong: true, received: req.body });
-});
-
 // Get employee record
 app.get('/api/employee/:email', async (req, res) => {
+    console.log('GET /api/employee/:email received');
     const email = decodeURIComponent(req.params.email);
     
     if (!API_KEY || !API_SECRET) {
@@ -137,6 +136,7 @@ app.get('/api/employee/:email', async (req, res) => {
 
 // Get today's shift assignment
 app.get('/api/shift-assignment/:employeeId', async (req, res) => {
+    console.log('GET /api/shift-assignment/:employeeId received');
     const employeeId = req.params.employeeId;
     const today = new Date().toISOString().split('T')[0];
     
@@ -212,6 +212,7 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
 
 // Create check-in
 app.post('/api/checkin', async (req, res) => {
+    console.log('POST /api/checkin received');
     const { employeeId, logType, timestamp } = req.body;
     
     if (!employeeId || !logType || !timestamp) {
@@ -254,6 +255,7 @@ app.post('/api/checkin', async (req, res) => {
 
 // Get today's check-ins
 app.get('/api/today-checkins/:employeeId', async (req, res) => {
+    console.log('GET /api/today-checkins/:employeeId received');
     const employeeId = req.params.employeeId;
     const today = new Date().toISOString().split('T')[0];
     
@@ -277,6 +279,12 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
         console.error('Check-ins fetch error:', error);
         res.status(500).json({ error: 'Server error fetching check-ins' });
     }
+});
+
+// 404 handler for undefined routes
+app.use((req, res) => {
+    console.log(`404 - Route not found: ${req.method} ${req.path}`);
+    res.status(404).json({ error: `Route ${req.method} ${req.path} not found` });
 });
 
 const PORT = process.env.PORT || 3000;
