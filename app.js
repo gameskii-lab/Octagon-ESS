@@ -99,9 +99,14 @@ async function handleLogin() {
         return;
     }
     
-    const loginBtn = document.querySelector('#loginSection button');
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Signing in...';
+    // Find the login button - handle both old and new HTML structures
+    const loginBtn = document.querySelector('#loginScreen button') || 
+                     document.querySelector('#loginSection button');
+    
+    if (loginBtn) {
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Signing in...';
+    }
     
     try {
         // Step 1: Authenticate via middleware
@@ -129,8 +134,9 @@ async function handleLogin() {
         config.employeeId = currentEmployee.id;
         config.employmentType = currentEmployee.employment_type || 'Full-time';
         userEmail = email;
-
-        updateDraweInfo();
+        
+        // Update drawer info with employee name
+        updateDrawerInfo();
         
         // Store for persistence
         localStorage.setItem('erpnext_config', JSON.stringify(config));
@@ -142,14 +148,17 @@ async function handleLogin() {
         
         // Update UI with employee info
         const employeeName = currentEmployee.name || currentEmployee.employee_name || 'Employee';
-        document.getElementById('employeeInfo').innerHTML = `
-            👤 ${employeeName}<br>
-            🏢 ${currentEmployee.department || 'N/A'}<br>
-            💼 ${currentEmployee.designation || 'N/A'}<br>
-            <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
-                ${config.employmentType}
-            </span>
-        `;
+        const employeeInfoEl = document.getElementById('employeeInfo');
+        if (employeeInfoEl) {
+            employeeInfoEl.innerHTML = `
+                👤 ${employeeName}<br>
+                🏢 ${currentEmployee.department || 'N/A'}<br>
+                💼 ${currentEmployee.designation || 'N/A'}<br>
+                <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
+                    ${config.employmentType}
+                </span>
+            `;
+        }
         
         showAppSection();
         initializeDashboard();
@@ -159,8 +168,10 @@ async function handleLogin() {
         console.error('Login error:', error);
         showStatus(`Login error: ${error.message}`, 'error');
     } finally {
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Sign In';
+        if (loginBtn) {
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Sign In';
+        }
     }
 }
 
