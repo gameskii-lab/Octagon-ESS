@@ -51,33 +51,38 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+// Get device location
 function getLocation() {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                currentLocation = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude
-                };
-                const locationEl = document.getElementById('locationDisplay');
-                if (locationEl) {
-                    locationEl.innerHTML = `📍 Lat: ${currentLocation.latitude.toFixed(6)}, Lng: ${currentLocation.longitude.toFixed(6)}`;
-                }
-            },
-            (error) => {
-                const locationEl = document.getElementById('locationDisplay');
-                if (locationEl) {
-                    locationEl.textContent = '❌ Location unavailable';
-                }
-                console.error('Geolocation error:', error);
-            }
-        );
-    } else {
-        const locationEl = document.getElementById('locationDisplay');
-        if (locationEl) {
-            locationEl.textContent = '❌ Geolocation not supported';
-        }
+    const locationEl = document.getElementById('locationDisplay');
+    
+    if (!navigator.geolocation) {
+        locationEl.textContent = '❌ Geolocation not supported';
+        return;
     }
+    
+    locationEl.textContent = '📍 Requesting location...';
+    
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            currentLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+            locationEl.innerHTML = `📍 Lat: ${currentLocation.latitude.toFixed(6)}, Lng: ${currentLocation.longitude.toFixed(6)}`;
+        },
+        (error) => {
+            console.error('Geolocation error:', error);
+            locationEl.innerHTML = `
+                ❌ Location unavailable 
+                <button onclick="getLocation()" style="padding: 4px 8px; margin-left: 8px; font-size: 12px; width: auto;">Retry</button>
+            `;
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
 }
 
 // Handle login with email and password
