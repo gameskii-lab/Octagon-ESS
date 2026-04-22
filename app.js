@@ -463,13 +463,17 @@ function showStatus(message, type) {
 // ============================================
 
 function openDrawer() {
-    document.getElementById('sideDrawer').classList.add('open');
-    document.getElementById('drawerOverlay').classList.add('open');
+    const drawer = document.getElementById('sideDrawer');
+    const overlay = document.getElementById('drawerOverlay');
+    if (drawer) drawer.classList.add('open');
+    if (overlay) overlay.classList.add('open');
 }
 
 function closeDrawer() {
-    document.getElementById('sideDrawer').classList.remove('open');
-    document.getElementById('drawerOverlay').classList.remove('open');
+    const drawer = document.getElementById('sideDrawer');
+    const overlay = document.getElementById('drawerOverlay');
+    if (drawer) drawer.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
 }
 
 function navigateTo(screen) {
@@ -494,26 +498,27 @@ function navigateTo(screen) {
         'schedule': 'Schedule',
         'profile': 'Profile'
     };
-    document.getElementById('screenTitle').textContent = titles[screen] || 'Octagon ESS';
+    const titleEl = document.getElementById('screenTitle');
+    if (titleEl) titleEl.textContent = titles[screen] || 'Octagon ESS';
     
     // Load screen-specific data
     if (screen === 'leave') {
-        loadLeaveScreen();
+        if (typeof loadLeaveScreen === 'function') loadLeaveScreen();
     } else if (screen === 'payslips') {
-        loadPayslipsScreen();
+        if (typeof loadPayslipsScreen === 'function') loadPayslipsScreen();
     } else if (screen === 'schedule') {
-        loadScheduleScreen();
+        if (typeof loadScheduleScreen === 'function') loadScheduleScreen();
     } else if (screen === 'profile') {
-        loadProfileScreen();
+        if (typeof loadProfileScreen === 'function') loadProfileScreen();
     }
-}
-    }, 5000);
 }
 
 function updateDrawerInfo() {
     const employeeName = currentEmployee?.name || currentEmployee?.employee_name || 'Employee';
-    document.getElementById('drawerEmployeeName').textContent = employeeName;
-    document.getElementById('drawerEmployeeDept').textContent = currentEmployee?.department || 'N/A';
+    const nameEl = document.getElementById('drawerEmployeeName');
+    const deptEl = document.getElementById('drawerEmployeeDept');
+    if (nameEl) nameEl.textContent = employeeName;
+    if (deptEl) deptEl.textContent = currentEmployee?.department || 'N/A';
 }
 // ============================================
 // LEAVE FUNCTIONS
