@@ -327,19 +327,26 @@ async function loadOfficeStaffDashboard() {
     const month = today.toLocaleDateString('en-US', { month: 'long' });
     const year = today.getFullYear();
     
-    document.getElementById('attendanceDisplay').innerHTML = `
-        <p><strong>${month} ${year}</strong></p>
-        <div class="hours-row"><span>Present Days:</span> <span>--</span></div>
-        <div class="hours-row"><span>Absent Days:</span> <span>--</span></div>
-        <p style="font-size: 12px; color: #666; margin-top: 8px;">* Sync in progress</p>
-    `;
+    const attendanceDisplay = document.getElementById('attendanceDisplay');
+    if (attendanceDisplay) {
+        attendanceDisplay.innerHTML = `
+            <p><strong>${month} ${year}</strong></p>
+            <div class="hours-row"><span>Present Days:</span> <span>--</span></div>
+            <div class="hours-row"><span>Absent Days:</span> <span>--</span></div>
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">* Sync in progress</p>
+        `;
+    }
     
-    document.getElementById('leaveDisplay').innerHTML = `
-        <div class="hours-row"><span>Annual Leave:</span> <span>-- / 14 days</span></div>
-        <div class="hours-row"><span>Sick Leave:</span> <span>-- / 14 days</span></div>
-    `;
+    // The leaveDisplay element doesn't exist in the new design
+    // Leave info is now on the separate Leave screen
+    const leaveDisplay = document.getElementById('leaveDisplay');
+    if (leaveDisplay) {
+        leaveDisplay.innerHTML = `
+            <div class="hours-row"><span>Annual Leave:</span> <span>-- / 14 days</span></div>
+            <div class="hours-row"><span>Sick Leave:</span> <span>-- / 14 days</span></div>
+        `;
+    }
 }
-
 async function checkCurrentStatus() {
     try {
         const response = await fetch(`${config.middlewareUrl}/api/today-checkins/${config.employeeId}`);
