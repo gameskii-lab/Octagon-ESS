@@ -3,44 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>ERPNext Attendance</title>
+    <title>Octagon ESS</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             max-width: 400px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 16px;
             background: #f5f7fa;
         }
         .container {
             background: white;
-            border-radius: 16px;
+            border-radius: 20px;
             padding: 24px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         h1 {
-            margin: 0 0 8px 0;
+            margin: 0 0 4px 0;
             font-size: 24px;
+        }
+        h2 {
+            margin: 16px 0 8px 0;
+            font-size: 18px;
+            color: #333;
+        }
+        h3 {
+            margin: 12px 0 8px 0;
+            font-size: 16px;
+            color: #555;
         }
         .subtitle {
             color: #666;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
         .employee-info {
             background: #e8f0fe;
-            padding: 12px;
-            border-radius: 8px;
+            padding: 14px;
+            border-radius: 12px;
             margin-bottom: 20px;
+        }
+        .worksite-info {
+            background: #fff3e0;
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            font-size: 14px;
         }
         .check-btn {
             width: 100%;
-            padding: 60px 20px;
-            font-size: 32px;
+            padding: 50px 20px;
+            font-size: 28px;
             font-weight: bold;
             border: none;
-            border-radius: 16px;
+            border-radius: 20px;
             cursor: pointer;
             transition: all 0.2s;
+            margin: 16px 0;
         }
         .check-in {
             background: #4CAF50;
@@ -55,9 +76,9 @@
             cursor: not-allowed;
         }
         .status {
-            margin-top: 20px;
-            padding: 12px;
-            border-radius: 8px;
+            margin-top: 16px;
+            padding: 14px;
+            border-radius: 12px;
             text-align: center;
         }
         .success {
@@ -68,66 +89,186 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .info {
+            background: #e3f2fd;
+            color: #1565c0;
+        }
         .location {
             font-size: 12px;
             color: #666;
             margin-top: 8px;
+            text-align: center;
+        }
+        .hours-card, .leave-card, .attendance-card {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 12px;
+            margin: 12px 0;
+        }
+        .hours-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+        }
+        .hours-total {
+            font-weight: bold;
+            font-size: 18px;
+            border-top: 1px solid #ddd;
+            padding-top: 8px;
+            margin-top: 8px;
+        }
+        .login-section, .config-section, .app-section {
+            transition: all 0.3s;
         }
         .config-section {
-            margin-top: 30px;
+            margin-top: 20px;
             padding-top: 20px;
             border-top: 1px solid #ddd;
         }
-        .config-section input {
+        input, button {
             width: 100%;
-            padding: 10px;
+            padding: 14px;
             margin: 8px 0;
             border: 1px solid #ddd;
-            border-radius: 8px;
+            border-radius: 12px;
             box-sizing: border-box;
+            font-size: 16px;
         }
-        .config-section button {
-            width: 100%;
-            padding: 12px;
+        button {
             background: #2196F3;
             color: white;
             border: none;
-            border-radius: 8px;
+            font-weight: bold;
             cursor: pointer;
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        .logout-btn {
+            background: #dc3545;
+            margin-top: 20px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-field {
+            background: #ff9800;
+            color: white;
+        }
+        .badge-office {
+            background: #2196F3;
+            color: white;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .flex-row {
+            display: flex;
+            gap: 10px;
+        }
+        .flex-row button {
+            flex: 1;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>⏰ Attendance</h1>
+        <h1>⏰ Octagon ESS</h1>
         <p class="subtitle" id="dateDisplay"></p>
         
-        <div class="employee-info" id="employeeInfo">
-            Not logged in
+        <!-- LOGIN SECTION (Shown initially) -->
+        <div id="loginSection" class="login-section">
+            <h3>Sign In</h3>
+            <input type="url" id="serverUrl" placeholder="ERPNext Server URL" value="https://erpnext-cors-proxy.onrender.com">
+            <input type="email" id="loginEmail" placeholder="Email" value="">
+            <input type="password" id="loginPassword" placeholder="Password" value="">
+            <button onclick="handleLogin()">Sign In</button>
+            <p style="text-align: center; margin-top: 16px; color: #666; font-size: 14px;">
+                Use your ERPNext credentials
+            </p>
         </div>
         
-        <button class="check-btn check-in" id="checkBtn" disabled>
-            CHECK IN
-        </button>
-        
-        <div id="locationDisplay" class="location">
-            📍 Getting location...
-        </div>
-        
-        <div id="statusMessage"></div>
-        
-        <div class="config-section">
-            <h3>API Configuration</h3>
+        <!-- CONFIG SECTION (Admin/Setup only - hidden by default) -->
+        <div id="configSection" class="config-section hidden">
+            <h3>⚙️ Advanced Configuration</h3>
             <input type="text" id="apiUrl" placeholder="ERPNext URL" value="">
             <input type="text" id="apiKey" placeholder="API Key" value="">
             <input type="password" id="apiSecret" placeholder="API Secret" value="">
             <input type="text" id="employeeId" placeholder="Employee ID" value="">
-
             <input type="text" id="siteLat" placeholder="Worksite Latitude" value="">
             <input type="text" id="siteLng" placeholder="Worksite Longitude" value="">
-            <input type="number" id="siteRadius" placeholder="Allowed Radius (meters)" value="100">         
+            <input type="number" id="siteRadius" placeholder="Allowed Radius (meters)" value="100">
+            <button onclick="saveConfig()">Save & Connect (Admin)</button>
+        </div>
+        
+        <!-- MAIN APP SECTION (Hidden until login) -->
+        <div id="appSection" class="app-section hidden">
+            <!-- Employee Info -->
+            <div class="employee-info" id="employeeInfo">
+                Loading...
+            </div>
             
-            <button onclick="saveConfig()">Save & Connect</button>
+            <!-- Worksite Info (Field Workers Only) -->
+            <div id="worksiteDisplay" class="worksite-info">
+                📍 Loading assignment...
+            </div>
+            
+            <!-- Check-In/Out Button (Field Workers Only) -->
+            <button class="check-btn check-in" id="checkBtn" disabled>
+                CHECK IN
+            </button>
+            
+            <!-- Location Display -->
+            <div id="locationDisplay" class="location">
+                📍 Getting location...
+            </div>
+            
+            <!-- Field Worker Dashboard (Hours & Timesheet) -->
+            <div id="fieldWorkerDashboard" class="hidden">
+                <h2>📊 Today's Hours</h2>
+                <div class="hours-card" id="hoursDisplay">
+                    Loading hours...
+                </div>
+                <h2>📅 This Week</h2>
+                <div class="hours-card" id="weekHoursDisplay">
+                    Loading...
+                </div>
+            </div>
+            
+            <!-- Office Staff Dashboard (Attendance & Leave) -->
+            <div id="officeStaffDashboard" class="hidden">
+                <h2>📅 Monthly Attendance</h2>
+                <div class="attendance-card" id="attendanceDisplay">
+                    Loading attendance...
+                </div>
+                <h2>🏖️ Leave Balance</h2>
+                <div class="leave-card" id="leaveDisplay">
+                    Loading leave balance...
+                </div>
+                <button onclick="applyLeave()">📝 Apply for Leave</button>
+            </div>
+            
+            <!-- Common Actions -->
+            <h2>🔧 Quick Actions</h2>
+            <div class="flex-row">
+                <button onclick="viewPayslips()">💰 Payslips</button>
+                <button onclick="viewSchedule()">📋 Schedule</button>
+            </div>
+            
+            <!-- Status Message -->
+            <div id="statusMessage"></div>
+            
+            <!-- Logout Button -->
+            <button class="logout-btn" onclick="logout()">🚪 Sign Out</button>
+            
+            <!-- Admin: Show Config (small link) -->
+            <p style="text-align: center; margin-top: 16px;">
+                <a href="#" onclick="showConfigSection()" style="color: #999; font-size: 12px;">Advanced</a>
+            </p>
         </div>
     </div>
 
