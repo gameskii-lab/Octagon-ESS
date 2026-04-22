@@ -1,34 +1,33 @@
 // Global state
 let currentStatus = 'OUT';
 let currentLocation = null;
-let sessionToken = null;
 let currentEmployee = null;
-let todaysAssignment = null;
+let userEmail = '';
 let config = {
-    apiUrl: '',
+    middlewareUrl: 'https://erpnext-middleware.onrender.com',
     employeeId: '',
     employmentType: '',
     siteLat: null,
     siteLng: null,
     siteRadius: 100,
-    todaysShift: null,
-    shiftLocationName: ''
+    shiftLocationName: '',
+    todaysShift: null
 };
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     displayDate();
-    loadSavedServerUrl();
     getLocation();
     
-    const savedToken = localStorage.getItem('sessionToken');
-    const savedEmployee = localStorage.getItem('currentEmployee');
+    // Check if already logged in
     const savedConfig = localStorage.getItem('erpnext_config');
+    const savedEmployee = localStorage.getItem('currentEmployee');
+    const savedEmail = localStorage.getItem('userEmail');
     
-    if (savedToken && savedEmployee && savedConfig) {
-        sessionToken = savedToken;
-        currentEmployee = JSON.parse(savedEmployee);
+    if (savedConfig && savedEmployee && savedEmail) {
         config = JSON.parse(savedConfig);
+        currentEmployee = JSON.parse(savedEmployee);
+        userEmail = savedEmail;
         showAppSection();
         initializeDashboard();
     }
@@ -38,14 +37,6 @@ function displayDate() {
     const now = new Date();
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     document.getElementById('dateDisplay').textContent = now.toLocaleDateString('en-US', options);
-}
-
-function loadSavedServerUrl() {
-    const saved = localStorage.getItem('erpnext_config');
-    if (saved) {
-        config = JSON.parse(saved);
-        document.getElementById('serverUrl').value = config.apiUrl || 'https://erpnext-cors-proxy.onrender.com';
-    }
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -68,156 +59,128 @@ function getLocation() {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude
                 };
-                document.getElementById('locationDisplay').innerHTML = 
-                    `📍 Lat: ${currentLocation.latitude.toFixed(6)}, Lng: ${currentLocation.longitude.toFixed(6)}`;
+                const locationEl = document.getElementById('locationDisplay');
+                if (locationEl) {
+                    locationEl.innerHTML = `📍 Lat: ${currentLocation.latitude.toFixed(6)}, Lng: ${currentLocation.longitude.toFixed(6)}`;
+                }
             },
             (error) => {
-                document.getElementById('locationDisplay').textContent = '❌ Location unavailable';
+                const locationEl = document.getElementById('locationDisplay');
+                if (locationEl) {
+                    locationEl.textContent = '❌ Location unavailable';
+                }
                 console.error('Geolocation error:', error);
             }
         );
     } else {
-        document.getElementById('locationDisplay').textContent = '❌ Geolocation not supported';
+        const locationEl = document.getElementById('locationDisplay');
+        if (locationEl) {
+            locationEl.textContent = '❌ Geolocation not supported';
+        }
     }
 }
 
+// Handle login with email and password
 async function handleLogin() {
-    const serverUrl = document.getElementById('serverUrl').value;
-    const email = document.getElementById('loginEmail').value;
+    const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     
-    if (!serverUrl || !email || !password) {
-        showStatus('Please fill in all fields', 'error');
+    if (!email || !password) {
+        showStatus('Please enter email and password', 'error');
         return;
     }
     
-    config.apiUrl = serverUrl;
+    const loginBtn = document.querySelector('#loginSection button');
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Signing in...';
     
     try {
-        const baseUrl = config.apiUrl.replace(/\/$/, '');
-        const response = await fetch(`${baseUrl}/api/method/login`, {
+        // Step 1: Authenticate via middleware
+        const loginResponse = await fetch(`${config.middlewareUrl}/api/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ usr: email, pwd: password })
+            body: JSON.stringify({ email, password })
         });
         
-        const result = await response.json();
+        const loginResult = await loginResponse.json();
         
-        if (response.ok && result.message === 'Logged In') {
-            sessionToken = result.session_token;
-            localStorage.setItem('sessionToken', sessionToken);
-            
-            await fetchEmployeeByUser(email);
-            await fetchTodaysShiftAssignment();
-            
-            localStorage.setItem('erpnext_config', JSON.stringify(config));
-            localStorage.setItem('currentEmployee', JSON.stringify(currentEmployee));
-            
-            showAppSection();
-            initializeDashboard();
-            showStatus(`Welcome, ${currentEmployee.employee_name}!`, 'success');
-        } else {
-            throw new Error(result.message || 'Login failed');
+        if (!loginResult.success) {
+            throw new Error(loginResult.error || 'Invalid credentials');
         }
-    } catch (error) {
-        showStatus(`Login error: ${error.message}`, 'error');
-    }
-}
-
-async function fetchEmployeeByUser(email) {
-    const baseUrl = config.apiUrl.replace(/\/$/, '');
-    
-    const response = await fetch(
-        `${baseUrl}/api/resource/Employee?filters=[["user_id","=","${email}"]]&limit=1`,
-        { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-    );
-    
-    const data = await response.json();
-    
-    if (data.data && data.data.length > 0) {
-        currentEmployee = data.data[0];
-        config.employeeId = currentEmployee.name;
-        config.employmentType = currentEmployee.employment_type || 'Full-time';
         
+        // Step 2: Fetch employee record
+        const empResponse = await fetch(`${config.middlewareUrl}/api/employee/${encodeURIComponent(email)}`);
+        const empResult = await empResponse.json();
+        
+        if (!empResult.success) {
+            throw new Error(empResult.error || 'Employee record not found');
+        }
+        
+        currentEmployee = empResult.employee;
+        config.employeeId = currentEmployee.id;
+        config.employmentType = currentEmployee.employment_type || 'Full-time';
+        userEmail = email;
+        
+        // Store for persistence
+        localStorage.setItem('erpnext_config', JSON.stringify(config));
+        localStorage.setItem('currentEmployee', JSON.stringify(currentEmployee));
+        localStorage.setItem('userEmail', userEmail);
+        
+        // Step 3: Fetch today's shift assignment
+        await fetchTodaysShiftAssignment();
+        
+        // Update UI
         document.getElementById('employeeInfo').innerHTML = `
-            👤 ${currentEmployee.employee_name}<br>
+            👤 ${currentEmployee.name}<br>
             🏢 ${currentEmployee.department || 'N/A'}<br>
             💼 ${currentEmployee.designation || 'N/A'}<br>
             <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
                 ${config.employmentType}
             </span>
         `;
-    } else {
-        throw new Error('No employee record found for this user');
+        
+        showAppSection();
+        initializeDashboard();
+        showStatus(`Welcome, ${currentEmployee.name}!`, 'success');
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        showStatus(`Login error: ${error.message}`, 'error');
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
     }
 }
 
-// 🔥 NEW: Fetch today's Shift Assignment and linked Shift Location
+// Fetch today's shift assignment from middleware
 async function fetchTodaysShiftAssignment() {
-    const baseUrl = config.apiUrl.replace(/\/$/, '');
-    const today = new Date().toISOString().split('T')[0];
-    
     try {
-        // Step 1: Query Shift Assignment for today
-        const shiftResponse = await fetch(
-            `${baseUrl}/api/resource/Shift%20Assignment?filters=[["employee","=","${config.employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&fields=["name","shift_type"]&limit=1`,
-            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-        );
+        const response = await fetch(`${config.middlewareUrl}/api/shift-assignment/${config.employeeId}`);
+        const result = await response.json();
         
-        const shiftData = await shiftResponse.json();
-        
-        if (shiftData.data && shiftData.data.length > 0) {
-            const assignment = shiftData.data[0];
-            todaysAssignment = assignment;
-            config.todaysShift = assignment.shift_type;
+        if (result.success && result.assignment && result.assignment.location) {
+            const loc = result.assignment.location;
+            config.siteLat = loc.latitude;
+            config.siteLng = loc.longitude;
+            config.siteRadius = loc.radius || 100;
+            config.shiftLocationName = loc.name;
+            config.todaysShift = result.assignment.shift_type;
             
-            // Step 2: Fetch Shift Type details to get Shift Location
-            const shiftTypeResponse = await fetch(
-                `${baseUrl}/api/resource/Shift%20Type/${assignment.shift_type}`,
-                { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-            );
+            document.getElementById('worksiteDisplay').innerHTML = `
+                ✅ Assigned: ${loc.name}<br>
+                📏 Radius: ${config.siteRadius}m<br>
+                🕒 Shift: ${result.assignment.shift_type}
+            `;
+            document.getElementById('checkBtn').disabled = false;
             
-            const shiftTypeData = await shiftTypeResponse.json();
-            
-            if (shiftTypeData.data && shiftTypeData.data.shift_location) {
-                const shiftLocation = shiftTypeData.data.shift_location;
-                
-                // Step 3: Fetch Shift Location for geofencing
-                const locationResponse = await fetch(
-                    `${baseUrl}/api/resource/Shift%20Location/${shiftLocation}`,
-                    { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-                );
-                
-                const locationData = await locationResponse.json();
-                
-                if (locationData.data) {
-                    config.siteLat = locationData.data.latitude;
-                    config.siteLng = locationData.data.longitude;
-                    config.siteRadius = locationData.data.allowed_radius || 100;
-                    config.shiftLocationName = locationData.data.location_name;
-                    
-                    document.getElementById('worksiteDisplay').innerHTML = 
-                        `✅ Assigned: ${locationData.data.location_name}<br>
-                         📏 Radius: ${config.siteRadius}m<br>
-                         🕒 Shift: ${assignment.shift_type}`;
-                    
-                    document.getElementById('checkBtn').disabled = false;
-                } else {
-                    document.getElementById('worksiteDisplay').innerHTML = 
-                        '⚠️ Worksite location not configured. Contact admin.';
-                }
-            } else {
-                document.getElementById('worksiteDisplay').innerHTML = 
-                    '⚠️ No worksite linked to your shift. Using default if available.';
-                document.getElementById('checkBtn').disabled = false;
-            }
+            // Check current check-in status
+            await checkCurrentStatus();
         } else {
-            document.getElementById('worksiteDisplay').innerHTML = 
-                '⚠️ No shift assigned for today. Contact scheduler.';
+            document.getElementById('worksiteDisplay').innerHTML = '⚠️ No shift assigned for today. Contact scheduler.';
             document.getElementById('checkBtn').disabled = true;
         }
     } catch (error) {
-        console.error('Error fetching shift assignment:', error);
+        console.error('Error fetching shift:', error);
         document.getElementById('worksiteDisplay').textContent = '❌ Error loading assignment';
         document.getElementById('checkBtn').disabled = true;
     }
@@ -228,9 +191,7 @@ function showAppSection() {
     document.getElementById('configSection').classList.add('hidden');
     document.getElementById('appSection').classList.remove('hidden');
     
-    if (config.employmentType === 'Daily Wage') {
-        checkCurrentStatus();
-    } else {
+    if (config.employmentType !== 'Daily Wage') {
         document.getElementById('checkBtn').style.display = 'none';
         document.getElementById('worksiteDisplay').textContent = '🏢 Office-based employee';
     }
@@ -249,19 +210,12 @@ function initializeDashboard() {
 }
 
 async function loadFieldWorkerDashboard() {
-    const baseUrl = config.apiUrl.replace(/\/$/, '');
-    const today = new Date().toISOString().split('T')[0];
-    
     try {
-        const response = await fetch(
-            `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`,
-            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-        );
+        const response = await fetch(`${config.middlewareUrl}/api/today-checkins/${config.employeeId}`);
+        const result = await response.json();
         
-        const data = await response.json();
-        
-        if (data.data && data.data.length > 0) {
-            const hours = calculateHoursFromCheckins(data.data);
+        if (result.success && result.checkins) {
+            const hours = calculateHoursFromCheckins(result.checkins);
             document.getElementById('hoursDisplay').innerHTML = `
                 <div class="hours-row"><span>Regular Hours:</span> <span>${hours.regular.toFixed(2)} hrs</span></div>
                 <div class="hours-row"><span>Overtime:</span> <span>${hours.overtime.toFixed(2)} hrs</span></div>
@@ -272,8 +226,8 @@ async function loadFieldWorkerDashboard() {
         }
         
         document.getElementById('weekHoursDisplay').innerHTML = `
-            <div class="hours-row"><span>This Week:</span> <span>Calculating...</span></div>
-            <p style="font-size: 12px; color: #666; margin-top: 8px;">* Full week view coming soon</p>
+            <div class="hours-row"><span>This Week:</span> <span>-- hrs</span></div>
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">* Week summary coming soon</p>
         `;
     } catch (error) {
         console.error('Error loading dashboard:', error);
@@ -324,20 +278,13 @@ async function loadOfficeStaffDashboard() {
 
 async function checkCurrentStatus() {
     try {
-        const today = new Date().toISOString().split('T')[0];
-        const baseUrl = config.apiUrl.replace(/\/$/, '');
-        const response = await fetch(
-            `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20desc&limit=1`,
-            { headers: { 'Authorization': `Bearer ${sessionToken}` } }
-        );
+        const response = await fetch(`${config.middlewareUrl}/api/today-checkins/${config.employeeId}`);
+        const result = await response.json();
         
-        if (response.ok) {
-            const data = await response.json();
-            if (data.data && data.data.length > 0) {
-                const lastLog = data.data[0];
-                currentStatus = lastLog.log_type;
-                updateButtonState();
-            }
+        if (result.success && result.checkins && result.checkins.length > 0) {
+            const lastLog = result.checkins[result.checkins.length - 1];
+            currentStatus = lastLog.log_type;
+            updateButtonState();
         }
     } catch (error) {
         console.error('Error checking status:', error);
@@ -355,13 +302,15 @@ function updateButtonState() {
     }
 }
 
+// Handle check in/out
 document.getElementById('checkBtn').addEventListener('click', async () => {
     if (!currentLocation) {
         showStatus('Location not available. Please enable GPS.', 'error');
+        getLocation();
         return;
     }
     
-    // Geofencing validation using Shift Location from Shift Assignment
+    // Geofencing validation
     if (config.siteLat && config.siteLng) {
         const distance = calculateDistance(
             currentLocation.latitude,
@@ -388,7 +337,6 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     const logType = currentStatus === 'IN' ? 'OUT' : 'IN';
     
     try {
-        const baseUrl = config.apiUrl.replace(/\/$/, '');
         const now = new Date();
         const timestamp = now.getFullYear() + '-' + 
             String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -397,35 +345,29 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
             String(now.getMinutes()).padStart(2, '0') + ':' + 
             String(now.getSeconds()).padStart(2, '0');
         
-        const response = await fetch(
-            `${baseUrl}/api/resource/Employee%20Checkin`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${sessionToken}`
-                },
-                body: JSON.stringify({
-                    employee: config.employeeId,
-                    log_type: logType,
-                    time: timestamp
-                })
-            }
-        );
+        const response = await fetch(`${config.middlewareUrl}/api/checkin`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                employeeId: config.employeeId,
+                logType: logType,
+                timestamp: timestamp
+            })
+        });
         
         const result = await response.json();
         
-        if (response.ok && result.data) {
+        if (result.success) {
             currentStatus = logType;
             updateButtonState();
             showStatus(`✅ Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
             
+            // Refresh dashboard
             if (config.employmentType === 'Daily Wage') {
                 setTimeout(loadFieldWorkerDashboard, 1000);
             }
         } else {
-            const errorMsg = result.message || JSON.stringify(result);
-            throw new Error(errorMsg);
+            throw new Error(result.error || 'Check-in failed');
         }
     } catch (error) {
         showStatus(`❌ Error: ${error.message}`, 'error');
@@ -434,43 +376,45 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     }
 });
 
+// Placeholder functions
 function applyLeave() {
-    showStatus('Leave application feature coming soon!', 'info');
+    showStatus('📝 Leave application coming soon!', 'info');
 }
 
 function viewPayslips() {
-    showStatus('Payslip viewing coming soon!', 'info');
+    showStatus('💰 Payslip viewing coming soon!', 'info');
 }
 
 function viewSchedule() {
-    showStatus('Schedule viewing coming soon!', 'info');
+    showStatus('📋 Schedule viewing coming soon!', 'info');
 }
 
 function logout() {
-    localStorage.removeItem('sessionToken');
+    localStorage.removeItem('erpnext_config');
     localStorage.removeItem('currentEmployee');
-    sessionToken = null;
+    localStorage.removeItem('userEmail');
+    
     currentEmployee = null;
+    userEmail = '';
+    config.employeeId = '';
     
     document.getElementById('appSection').classList.add('hidden');
     document.getElementById('loginSection').classList.remove('hidden');
+    document.getElementById('loginEmail').value = '';
+    document.getElementById('loginPassword').value = '';
+    
     showStatus('Signed out successfully', 'info');
 }
 
 function showConfigSection() {
     document.getElementById('configSection').classList.remove('hidden');
-    document.getElementById('apiUrl').value = config.apiUrl || '';
 }
 
 function saveConfig() {
-    config.apiUrl = document.getElementById('apiUrl').value;
-    config.apiKey = document.getElementById('apiKey').value;
-    config.apiSecret = document.getElementById('apiSecret').value;
-    config.employeeId = document.getElementById('employeeId').value;
-    config.siteLat = parseFloat(document.getElementById('siteLat').value) || null;
-    config.siteLng = parseFloat(document.getElementById('siteLng').value) || null;
-    config.siteRadius = parseInt(document.getElementById('siteRadius').value) || 100;
-    
+    const middlewareUrl = document.getElementById('middlewareUrl').value;
+    if (middlewareUrl) {
+        config.middlewareUrl = middlewareUrl;
+    }
     localStorage.setItem('erpnext_config', JSON.stringify(config));
     showStatus('Configuration saved!', 'success');
 }
