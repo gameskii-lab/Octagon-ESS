@@ -4,7 +4,7 @@ let currentLocation = null;
 let currentEmployee = null;
 let userEmail = '';
 let config = {
-    middlewareUrl: 'https://erpnext-middleware.onrender.com',
+    middlewareUrl: 'https://octagon-ess-middleware-rl71.onrender.com',  // ✅ Correct URL,
     employeeId: '',
     employmentType: '',
     siteLat: null,
