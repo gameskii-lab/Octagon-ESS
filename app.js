@@ -240,16 +240,16 @@ async function fetchTodaysShiftAssignment() {
 function showAppSection() {
     const loginScreen = document.getElementById('loginScreen');
     const dashboardScreen = document.getElementById('dashboardScreen');
+    const appHeader = document.getElementById('appHeader');
     
     if (loginScreen) loginScreen.classList.remove('active');
     if (dashboardScreen) dashboardScreen.classList.add('active');
+    if (appHeader) appHeader.classList.remove('hidden');  // 👈 Show header
     
     document.getElementById('screenTitle').textContent = 'Dashboard';
     
-    // Update drawer info
     updateDrawerInfo();
     
-    // Show check-in button ONLY for Daily Wage employees
     const checkBtn = document.getElementById('checkBtn');
     const worksiteEl = document.getElementById('worksiteDisplay');
     
@@ -470,6 +470,10 @@ function logout() {
     userEmail = '';
     config.employeeId = '';
     
+    // Hide header
+    const appHeader = document.getElementById('appHeader');
+    if (appHeader) appHeader.classList.add('hidden');
+    
     // Hide all screens, show login
     const screens = ['dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
     screens.forEach(id => {
@@ -593,10 +597,8 @@ async function loadLeaveBalance() {
             });
             document.getElementById('leaveBalanceSummary').innerHTML = html;
         } else if (result.success && result.balances && result.balances.length === 0) {
-            // API returned successfully but no allocations exist
             document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">No leave allocations found</p>';
         } else {
-            // API error or other issue
             document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">Unable to load leave balance</p>';
         }
     } catch (error) {
