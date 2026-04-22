@@ -196,7 +196,7 @@ async function fetchTodaysShiftAssignment() {
     }
 }
 
-// Show main app section - FIXED VERSION
+// Show main app section - CORRECTED VERSION
 function showAppSection() {
     const loginSection = document.getElementById('loginSection');
     const appSection = document.getElementById('appSection');
@@ -204,15 +204,16 @@ function showAppSection() {
     if (loginSection) loginSection.classList.add('hidden');
     if (appSection) appSection.classList.remove('hidden');
     
-    // Show check-in button for all users during testing
+    // Show check-in button ONLY for Daily Wage employees
     const checkBtn = document.getElementById('checkBtn');
-    if (checkBtn) {
-        checkBtn.style.display = 'block';
-    }
+    const worksiteEl = document.getElementById('worksiteDisplay');
     
-    // If office staff, update worksite display
-    if (config.employmentType !== 'Daily Wage') {
-        const worksiteEl = document.getElementById('worksiteDisplay');
+    if (config.employmentType === 'Daily Wage') {
+        // Field worker - show check-in button
+        if (checkBtn) checkBtn.style.display = 'block';
+    } else {
+        // Office staff - hide check-in button
+        if (checkBtn) checkBtn.style.display = 'none';
         if (worksiteEl) worksiteEl.textContent = '🏢 Office-based employee';
     }
 }
