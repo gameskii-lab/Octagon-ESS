@@ -191,20 +191,6 @@
             </p>
         </div>
         
-        <!-- CONFIG SECTION (Admin/Setup only - hidden by default) -->
-        <div id="configSection" class="config-section hidden">
-            <h3>⚙️ Advanced Configuration</h3>
-            <input type="text" id="apiUrl" placeholder="ERPNext URL" value="">
-            <input type="text" id="apiKey" placeholder="API Key" value="">
-            <input type="password" id="apiSecret" placeholder="API Secret" value="">
-            <input type="text" id="employeeId" placeholder="Employee ID" value="">
-            <input type="text" id="siteLat" placeholder="Worksite Latitude" value="">
-            <input type="text" id="siteLng" placeholder="Worksite Longitude" value="">
-            <input type="number" id="siteRadius" placeholder="Allowed Radius (meters)" value="100">
-            <input type="url" id="middlewareUrl" placeholder="Middleware URL" value="https://octagon-ess-middleware-rl71.onrender.com">
-            <button onclick="saveConfig()">Save & Connect (Admin)</button>
-        </div>
-        
         <!-- MAIN APP SECTION (Hidden until login) -->
         <div id="appSection" class="app-section hidden">
             <!-- Employee Info -->
@@ -264,11 +250,6 @@
             
             <!-- Logout Button -->
             <button class="logout-btn" onclick="logout()">🚪 Sign Out</button>
-            
-            <!-- Admin: Show Config (small link) -->
-            <p style="text-align: center; margin-top: 16px;">
-                <a href="#" onclick="showConfigSection()" style="color: #999; font-size: 12px;">Advanced</a>
-            </p>
         </div>
     </div>
 
