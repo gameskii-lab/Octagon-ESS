@@ -4,7 +4,7 @@ let currentLocation = null;
 let currentEmployee = null;
 let userEmail = '';
 let config = {
-    middlewareUrl: 'https://octagon-ess-middleware-rl71.onrender.com',  // ✅ Correct URL,
+    middlewareUrl: 'https://octagon-ess-middleware-rl71.onrender.com',
     employeeId: '',
     employmentType: '',
     siteLat: null,
@@ -51,16 +51,16 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Get device location
+// Get device location - IMPROVED VERSION
 function getLocation() {
     const locationEl = document.getElementById('locationDisplay');
     
     if (!navigator.geolocation) {
-        locationEl.textContent = '❌ Geolocation not supported';
+        if (locationEl) locationEl.textContent = '❌ Geolocation not supported';
         return;
     }
     
-    locationEl.textContent = '📍 Requesting location...';
+    if (locationEl) locationEl.textContent = '📍 Requesting location...';
     
     navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -68,14 +68,18 @@ function getLocation() {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude
             };
-            locationEl.innerHTML = `📍 Lat: ${currentLocation.latitude.toFixed(6)}, Lng: ${currentLocation.longitude.toFixed(6)}`;
+            if (locationEl) {
+                locationEl.innerHTML = `📍 Lat: ${currentLocation.latitude.toFixed(6)}, Lng: ${currentLocation.longitude.toFixed(6)}`;
+            }
         },
         (error) => {
             console.error('Geolocation error:', error);
-            locationEl.innerHTML = `
-                ❌ Location unavailable 
-                <button onclick="getLocation()" style="padding: 4px 8px; margin-left: 8px; font-size: 12px; width: auto;">Retry</button>
-            `;
+            if (locationEl) {
+                locationEl.innerHTML = `
+                    ❌ Location unavailable 
+                    <button onclick="getLocation()" style="padding: 4px 8px; margin-left: 8px; font-size: 12px; width: auto; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Retry</button>
+                `;
+            }
         },
         {
             enableHighAccuracy: true,
@@ -134,9 +138,10 @@ async function handleLogin() {
         // Step 3: Fetch today's shift assignment
         await fetchTodaysShiftAssignment();
         
-        // Update UI
+        // Update UI with employee info
+        const employeeName = currentEmployee.name || currentEmployee.employee_name || 'Employee';
         document.getElementById('employeeInfo').innerHTML = `
-            👤 ${currentEmployee.name}<br>
+            👤 ${employeeName}<br>
             🏢 ${currentEmployee.department || 'N/A'}<br>
             💼 ${currentEmployee.designation || 'N/A'}<br>
             <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
@@ -146,7 +151,7 @@ async function handleLogin() {
         
         showAppSection();
         initializeDashboard();
-        showStatus(`Welcome, ${currentEmployee.name}!`, 'success');
+        showStatus(`Welcome, ${employeeName}!`, 'success');
         
     } catch (error) {
         console.error('Login error:', error);
@@ -191,14 +196,24 @@ async function fetchTodaysShiftAssignment() {
     }
 }
 
+// Show main app section - FIXED VERSION
 function showAppSection() {
-    document.getElementById('loginSection').classList.add('hidden');
-    document.getElementById('configSection').classList.add('hidden');
-    document.getElementById('appSection').classList.remove('hidden');
+    const loginSection = document.getElementById('loginSection');
+    const appSection = document.getElementById('appSection');
     
+    if (loginSection) loginSection.classList.add('hidden');
+    if (appSection) appSection.classList.remove('hidden');
+    
+    // Show check-in button for all users during testing
+    const checkBtn = document.getElementById('checkBtn');
+    if (checkBtn) {
+        checkBtn.style.display = 'block';
+    }
+    
+    // If office staff, update worksite display
     if (config.employmentType !== 'Daily Wage') {
-        document.getElementById('checkBtn').style.display = 'none';
-        document.getElementById('worksiteDisplay').textContent = '🏢 Office-based employee';
+        const worksiteEl = document.getElementById('worksiteDisplay');
+        if (worksiteEl) worksiteEl.textContent = '🏢 Office-based employee';
     }
 }
 
@@ -409,19 +424,6 @@ function logout() {
     document.getElementById('loginPassword').value = '';
     
     showStatus('Signed out successfully', 'info');
-}
-
-function showConfigSection() {
-    document.getElementById('configSection').classList.remove('hidden');
-}
-
-function saveConfig() {
-    const middlewareUrl = document.getElementById('middlewareUrl').value;
-    if (middlewareUrl) {
-        config.middlewareUrl = middlewareUrl;
-    }
-    localStorage.setItem('erpnext_config', JSON.stringify(config));
-    showStatus('Configuration saved!', 'success');
 }
 
 function showStatus(message, type) {
