@@ -46,14 +46,14 @@
         .menu-btn {
             background: none;
             border: none;
-            font-size: 28px;
+            font-size: 30px;
             cursor: pointer;
             padding: 8px 12px;
             width: auto;
-            color: #333;  /* 👈 ADD THIS - Dark color for visibility */
+            color: #333;
             line-height: 1;
+            font-weight: 300;
         }
-        
         .profile-btn {
             background: none;
             border: none;
@@ -61,7 +61,7 @@
             cursor: pointer;
             padding: 8px 12px;
             width: auto;
-            color: #333;  /* 👈 ADD THIS - Dark color for visibility */
+            color: #333;
             line-height: 1;
         }
         
@@ -438,8 +438,6 @@
                         <button onclick="navigateTo('leave')">Apply for Leave →</button>
                     </div>
                 </div>
-                
-                <div id="statusMessage"></div>
             </div>
             
             <!-- Leave Screen -->
@@ -515,6 +513,9 @@
                 </div>
                 <button class="logout-btn" onclick="logout()">🚪 Sign Out</button>
             </div>
+            
+            <!-- Global Status Message (available on all screens) -->
+            <div id="statusMessage"></div>
         </div>
     </div>
 
