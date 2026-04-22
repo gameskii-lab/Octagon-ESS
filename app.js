@@ -25,6 +25,19 @@ function displayDate() {
     document.getElementById('dateDisplay').textContent = now.toLocaleDateString('en-US', options);
 }
 
+// Calculate distance between two coordinates in meters (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c; // Distance in meters
+}
+
 // Load saved config from localStorage
 function loadConfig() {
     const saved = localStorage.getItem('erpnext_config');
@@ -50,8 +63,8 @@ function saveConfig() {
     config.apiKey = document.getElementById('apiKey').value;
     config.apiSecret = document.getElementById('apiSecret').value;
     config.employeeId = document.getElementById('employeeId').value;
-    config.siteLat = parseFloat(document.getElementById('siteLat').value);
-    config.siteLng = parseFloat(document.getElementById('siteLng').value);
+    config.siteLat = parseFloat(document.getElementById('siteLat').value) || null;
+    config.siteLng = parseFloat(document.getElementById('siteLng').value) || null;
     config.siteRadius = parseInt(document.getElementById('siteRadius').value) || 100;
     
     localStorage.setItem('erpnext_config', JSON.stringify(config));
@@ -62,7 +75,6 @@ function saveConfig() {
 // Fetch employee details from ERPNext
 async function fetchEmployeeInfo() {
     try {
-        // Fix: Remove trailing slash from apiUrl
         const baseUrl = config.apiUrl.replace(/\/$/, '');
         const response = await fetch(`${baseUrl}/api/resource/Employee/${config.employeeId}`, {
             headers: {
@@ -93,7 +105,6 @@ async function fetchEmployeeInfo() {
 async function checkCurrentStatus() {
     try {
         const today = new Date().toISOString().split('T')[0];
-        // Fix: Remove trailing slash from apiUrl
         const baseUrl = config.apiUrl.replace(/\/$/, '');
         const response = await fetch(
             `${baseUrl}/api/resource/Employee%20Checkin?filters=[["employee","=","${config.employeeId}"],["time","like","${today}%"]]&order_by=time%20desc&limit=1`,
@@ -158,7 +169,7 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         return;
     }
     
-    // NEW: Geofencing check
+    // Geofencing validation
     if (config.siteLat && config.siteLng) {
         const distance = calculateDistance(
             currentLocation.latitude,
@@ -169,14 +180,13 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         
         if (distance > config.siteRadius) {
             showStatus(
-                `You are ${Math.round(distance)}m from the worksite. Maximum allowed is ${config.siteRadius}m. Check-in denied.`,
+                `📍 You are ${Math.round(distance)}m from worksite. Allowed: ${config.siteRadius}m. Check-in denied.`,
                 'error'
             );
             return;
         }
         
-        // Optional: Show distance for transparency
-        console.log(`Distance to worksite: ${Math.round(distance)}m`);
+        console.log(`✅ Distance to worksite: ${Math.round(distance)}m (within ${config.siteRadius}m limit)`);
     }
     
     const btn = document.getElementById('checkBtn');
@@ -218,13 +228,13 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
         if (response.ok && result.data) {
             currentStatus = logType;
             updateButtonState();
-            showStatus(`Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
+            showStatus(`✅ Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
         } else {
             const errorMsg = result.message || JSON.stringify(result);
             throw new Error(errorMsg);
         }
     } catch (error) {
-        showStatus(`Error: ${error.message}`, 'error');
+        showStatus(`❌ Error: ${error.message}`, 'error');
     } finally {
         btn.disabled = false;
     }
@@ -238,18 +248,5 @@ function showStatus(message, type) {
     setTimeout(() => {
         statusDiv.textContent = '';
         statusDiv.className = '';
-
-// Calculate distance between two coordinates in meters
-function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371000; // Earth's radius in meters
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distance in meters
-}
     }, 5000);
 }
