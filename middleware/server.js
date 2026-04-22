@@ -2,21 +2,35 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-// Middleware
-app.use(cors());
+// Enhanced CORS configuration
+const corsOptions = {
+    origin: ['https://octagon-ess.onrender.com', 'http://localhost:3000', 'http://127.0.0.1:5500'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
-// Configuration - Set these in Render Environment Variables
+// Explicitly handle preflight requests
+app.options('*', cors(corsOptions));
+
+// Configuration
 const ERP_URL = process.env.ERP_URL || 'https://erp.octagonerp.net';
 const API_KEY = process.env.API_KEY || '';
 const API_SECRET = process.env.API_SECRET || '';
 
 // Health check endpoint
 app.get('/', (req, res) => {
-    res.json({ status: 'ERPNext Middleware Running' });
+    res.json({ 
+        status: 'ERPNext Middleware Running',
+        endpoints: ['/api/login', '/api/employee/:email', '/api/shift-assignment/:employeeId', '/api/checkin', '/api/today-checkins/:employeeId']
+    });
 });
 
-// Login endpoint - validates user credentials
+// Login endpoint
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     
@@ -25,7 +39,6 @@ app.post('/api/login', async (req, res) => {
     }
     
     try {
-        // Try to login with provided credentials
         const loginResponse = await fetch(`${ERP_URL}/api/method/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -35,7 +48,6 @@ app.post('/api/login', async (req, res) => {
         const loginResult = await loginResponse.json();
         
         if (loginResponse.ok && loginResult.message === 'Logged In') {
-            // Success - return the user's identity
             res.json({ 
                 success: true, 
                 email: email,
@@ -52,7 +64,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// Get employee record for a user
+// Get employee record
 app.get('/api/employee/:email', async (req, res) => {
     const email = decodeURIComponent(req.params.email);
     
@@ -61,7 +73,6 @@ app.get('/api/employee/:email', async (req, res) => {
     }
     
     try {
-        // Use the middleware's own API key to fetch employee data
         const response = await fetch(
             `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&limit=1`,
             {
@@ -104,7 +115,6 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     }
     
     try {
-        // Fetch shift assignment
         const shiftResponse = await fetch(
             `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&limit=1`,
             {
@@ -122,7 +132,6 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
         
         const assignment = shiftData.data[0];
         
-        // Fetch shift type details for location
         const shiftTypeResponse = await fetch(
             `${ERP_URL}/api/resource/Shift%20Type/${assignment.shift_type}`,
             {
@@ -243,4 +252,5 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`ERPNext Middleware running on port ${PORT}`);
+    console.log(`CORS allowed origins: ${corsOptions.origin.join(', ')}`);
 });
