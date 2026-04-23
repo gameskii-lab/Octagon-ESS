@@ -507,7 +507,7 @@ function logout() {
     }
     
     // Hide all screens
-    const screens = ['dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
+    const screens = ['dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen', 'approvalsScreen'];
     screens.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -571,7 +571,7 @@ function navigateTo(screen) {
     closeDrawer();
     
     // Hide all screens
-    const screens = ['loginScreen', 'dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
+    const screens = ['loginScreen', 'dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen', 'approvalsScreen'];
     screens.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -593,7 +593,7 @@ function navigateTo(screen) {
         'leave': 'Leave',
         'payslips': 'Payslips',
         'schedule': 'Schedule',
-        'profile': 'Profile'
+        'profile': 'Profile',
         'approvals': 'Approvals' 
     };
     const titleEl = document.getElementById('screenTitle');
@@ -608,6 +608,10 @@ function navigateTo(screen) {
         if (typeof loadScheduleScreen === 'function') loadScheduleScreen();
     } else if (screen === 'profile') {
         if (typeof loadProfileScreen === 'function') loadProfileScreen();
+    } else if (screen === 'profile') {
+        if (typeof loadProfileScreen === 'function') loadProfileScreen();
+    } else if (screen === 'approvals') {
+        if (typeof loadApprovalsScreen === 'function') loadApprovalsScreen();
     }
 }
 
