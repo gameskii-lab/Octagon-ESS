@@ -350,18 +350,18 @@
         .app-header.hidden {
             display: none !important;
         }
-        /* Force login screen to be the only visible screen on page load */
+        /* Force login screen to be the only visible screen on INITIAL page load */
         #loginScreen {
-            display: block !important;
+            display: block;
         }
         #dashboardScreen, #leaveScreen, #payslipsScreen, #scheduleScreen, #profileScreen {
-            display: none !important;
+            display: none;
         }
         .screen.active {
             display: block !important;
         }
         #appHeader {
-            display: none !important;
+            display: none;
         }
         #appHeader.visible {
             display: flex !important;
@@ -541,6 +541,6 @@
         </div>
     </div>
 
-    <script src="ess.js?v=6"></script>
+    <script src="ess.js?v=7"></script>
 </body>
 </html>
