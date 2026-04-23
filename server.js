@@ -71,19 +71,24 @@ app.post('/api/login', async (req, res) => {
 // Get employee record by email
 app.get('/api/employee/:email', async (req, res) => {
     const email = decodeURIComponent(req.params.email);
+    
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
+    
     try {
         const response = await fetch(
-            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&limit=1`,
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type"]&limit=1`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
+        
         const data = await response.json();
+        
         if (data.data && data.data.length > 0) {
             const emp = data.data[0];
-            const employeeName = emp.employee_name || emp.name || 
-                (emp.first_name && emp.last_name ? `${emp.first_name} ${emp.last_name}` : 'Employee');
+            
+            const employeeName = emp.employee_name || emp.name || 'Employee';
+            
             res.json({
                 success: true,
                 employee: {
@@ -92,7 +97,7 @@ app.get('/api/employee/:email', async (req, res) => {
                     employee_name: employeeName,
                     department: emp.department || 'N/A',
                     designation: emp.designation || 'N/A',
-                    employment_type: emp.employment_type || 'Full-time'
+                    employment_type: emp.employment_type || 'Daily Wage'  // 👈 Default to Daily Wage
                 }
             });
         } else {
