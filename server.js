@@ -274,12 +274,24 @@ app.get('/api/leave-requests/:employeeId', async (req, res) => {
 // Submit leave application
 app.post('/api/leave-application', async (req, res) => {
     const { employeeId, leaveType, fromDate, toDate, halfDay, halfDayDate, reason } = req.body;
+    
+    console.log('📝 Leave application received:');
+    console.log('  employeeId:', employeeId);
+    console.log('  leaveType:', leaveType);
+    console.log('  fromDate:', fromDate);
+    console.log('  toDate:', toDate);
+    console.log('  halfDay:', halfDay);
+    console.log('  reason:', reason);
+    
     if (!employeeId || !leaveType || !fromDate || !toDate) {
+        console.log('❌ Missing required fields');
         return res.status(400).json({ error: 'Missing required fields' });
     }
+    
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
+    
     try {
         const payload = {
             employee: employeeId,
@@ -289,10 +301,14 @@ app.post('/api/leave-application', async (req, res) => {
             description: reason || 'Applied via ESS',
             status: 'Open'
         };
+        
         if (halfDay) {
             payload.half_day = 1;
             payload.half_day_date = halfDayDate || fromDate;
         }
+        
+        console.log('📤 Sending to ERPNext:', JSON.stringify(payload));
+        
         const response = await fetch(
             `${ERP_URL}/api/resource/Leave%20Application`,
             {
@@ -304,11 +320,15 @@ app.post('/api/leave-application', async (req, res) => {
                 body: JSON.stringify(payload)
             }
         );
+        
         const result = await response.json();
+        console.log('📥 ERPNext response:', JSON.stringify(result));
+        
         if (response.ok && result.data) {
             res.json({ success: true, data: result.data });
         } else {
-            res.status(400).json({ error: result.message || 'Failed to submit leave application' });
+            console.log('❌ ERPNext rejected:', result);
+            res.status(400).json({ error: result.message || result.exc || 'Failed to submit leave application' });
         }
     } catch (error) {
         console.error('Leave application error:', error);
