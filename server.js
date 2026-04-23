@@ -222,20 +222,32 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
 // Get leave balance
 app.get('/api/leave-balance/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
+    const today = new Date().toISOString().split('T')[0];
+    
+    console.log(`🔍 Fetching leave balance for employee: ${employeeId}`);
+    
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
+    
     try {
+        // Query with date validation - only allocations valid TODAY
         const response = await fetch(
-            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["leave_type","total_leaves_allocated","leaves_taken"]`,
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1],["from_date","<=","${today}"],["to_date",">=","${today}"]]&fields=["leave_type","total_leaves_allocated","leaves_taken","from_date","to_date"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
+        
         const data = await response.json();
+        console.log(`📊 Leave Allocation response:`, data.data?.length || 0, 'records found');
+        
         const balances = (data.data || []).map(alloc => ({
             leave_type: alloc.leave_type,
             leaves_allocated: alloc.total_leaves_allocated || 0,
-            leaves_taken: alloc.leaves_taken || 0
+            leaves_taken: alloc.leaves_taken || 0,
+            from_date: alloc.from_date,
+            to_date: alloc.to_date
         }));
+        
         res.json({ success: true, balances });
     } catch (error) {
         console.error('Leave balance error:', error);
@@ -318,4 +330,24 @@ app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`📍 ERP_URL: ${ERP_URL}`);
     console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO'}`);
+});
+// DEBUG: Check what Leave Allocation fields exist
+app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    try {
+        // Get ALL leave allocations without filters
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"]]&limit=5`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const data = await response.json();
+        res.json({ 
+            count: data.data?.length || 0,
+            data: data.data,
+            employeeId: employeeId
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
