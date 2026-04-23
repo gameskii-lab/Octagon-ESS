@@ -416,7 +416,7 @@ app.get('/api/debug/all-leave-allocations', async (req, res) => {
 // DYNAMIC WORKFLOW APPROVAL ENDPOINTS
 // ============================================
 
-// Get pending approvals for a user - DYNAMIC
+// Get pending approvals for a user - WORKS WITH OR WITHOUT WORKFLOW
 app.get('/api/approvals/:email', async (req, res) => {
     const email = decodeURIComponent(req.params.email);
     
@@ -425,9 +425,11 @@ app.get('/api/approvals/:email', async (req, res) => {
     }
     
     try {
-        // Get employee record to find user's roles
+        const approvals = [];
+        
+        // First, get the employee record for this user
         const empResponse = await fetch(
-            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","designation"]&limit=1`,
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name"]&limit=1`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const empData = await empResponse.json();
@@ -437,136 +439,105 @@ app.get('/api/approvals/:email', async (req, res) => {
         }
         
         const employee = empData.data[0];
+        const employeeName = employee.employee_name;
         
-        // Get ALL workflow actions where this user can act
-        // This queries the Workflow Action permission table
-        const wfResponse = await fetch(
-            `${ERP_URL}/api/resource/Workflow%20Action?fields=["*"]&limit=50`,
+        // ============================================
+        // METHOD 1: Check for Leave Applications pending approval
+        // This works without Workflow - uses Leave Approver
+        // ============================================
+        
+        // Get leave applications where:
+        // - Status is 'Open' 
+        // - Employee's leave approver is this user OR this user is HR Manager
+        const leaveAppResponse = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Application?filters=[["status","=","Open"]]&fields=["name","employee","employee_name","leave_type","from_date","to_date","total_leave_days","creation","leave_approver"]&limit=20`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
-        const wfData = await wfResponse.json();
+        const leaveAppData = await leaveAppResponse.json();
         
-        // Get user's roles
+        // Fetch user roles to check if HR Manager
         const userResponse = await fetch(
-            `${ERP_URL}/api/resource/User/${email}?fields=["roles"]`,
+            `${ERP_URL}/api/resource/User/${email}`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const userData = await userResponse.json();
+        const userRoles = (userData.data?.roles || []).map(r => r.role);
         
-        // Build list of documents pending approval
-        const approvals = [];
-        
-        for (const action of (wfData.data || [])) {
-            // Check if this user's role can perform this action
-            const userRoles = (userData.data?.roles || []).map(r => r.role);
-            if (!userRoles.includes(action.permitted_role)) continue;
+        for (const app of (leaveAppData.data || [])) {
+            // Check if this user is the Leave Approver for this employee
+            const approverEmpResponse = await fetch(
+                `${ERP_URL}/api/resource/Employee/${app.employee}`,
+                { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+            );
+            const approverData = await approverEmpResponse.json();
             
-            // Find documents in the "pending" state for this workflow
-            try {
-                const docResponse = await fetch(
-                    `${ERP_URL}/api/resource/${action.reference_doctype}?filters=[["workflow_state","=","${action.status}"]]&fields=["name","title","workflow_state","owner","modified"]&limit=20`,
-                    { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
-                );
-                const docData = await docResponse.json();
-                
-                for (const doc of (docData.data || [])) {
-                    approvals.push({
-                        doctype: action.reference_doctype,
-                        docname: doc.name,
-                        title: doc.title || doc.name,
-                        state: doc.workflow_state,
-                        next_action: action.action,
-                        owner: doc.owner,
-                        modified: doc.modified
-                    });
-                }
-            } catch (e) {
-                // Skip doctypes that don't have workflow_state field
-                continue;
+            const leaveApprover = approverData.data?.leave_approver;
+            const isApprover = (leaveApprover === employeeName || leaveApprover === email);
+            const isHRManager = userRoles.includes('HR Manager') || userRoles.includes('HR User');
+            
+            if (isApprover || isHRManager) {
+                approvals.push({
+                    doctype: 'Leave Application',
+                    docname: app.name,
+                    title: `${app.employee_name} - ${app.leave_type}`,
+                    subtitle: `${app.from_date} to ${app.to_date} (${app.total_leave_days} days)`,
+                    state: 'Open',
+                    next_action: 'Approve',
+                    employee: app.employee_name,
+                    detail: `${app.leave_type}: ${app.from_date} to ${app.to_date}`
+                });
             }
+        }
+        
+        // ============================================
+        // METHOD 2: Check for Workflow-based approvals
+        // This works WITH Workflow
+        // ============================================
+        
+        try {
+            const wfResponse = await fetch(
+                `${ERP_URL}/api/resource/Workflow%20Action?fields=["*"]&limit=50`,
+                { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+            );
+            const wfData = await wfResponse.json();
+            
+            for (const action of (wfData.data || [])) {
+                if (!userRoles.includes(action.permitted_role)) continue;
+                
+                try {
+                    const docResponse = await fetch(
+                        `${ERP_URL}/api/resource/${action.reference_doctype}?filters=[["workflow_state","=","${action.status}"]]&fields=["name","title","workflow_state","owner","modified"]&limit=20`,
+                        { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+                    );
+                    const docData = await docResponse.json();
+                    
+                    for (const doc of (docData.data || [])) {
+                        // Avoid duplicates with Method 1
+                        const alreadyAdded = approvals.some(a => a.docname === doc.name && a.doctype === action.reference_doctype);
+                        if (!alreadyAdded) {
+                            approvals.push({
+                                doctype: action.reference_doctype,
+                                docname: doc.name,
+                                title: doc.title || doc.name,
+                                subtitle: action.reference_doctype,
+                                state: doc.workflow_state,
+                                next_action: action.action,
+                                owner: doc.owner
+                            });
+                        }
+                    }
+                } catch (e) {
+                    continue;
+                }
+            }
+        } catch (e) {
+            // Workflow might not be set up - that's fine
+            console.log('No workflows configured - using default approval only');
         }
         
         res.json({ success: true, approvals });
     } catch (error) {
         console.error('Approvals error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get available workflow actions for a document
-app.get('/api/workflow-actions/:doctype/:docname', async (req, res) => {
-    const { doctype, docname } = req.params;
-    
-    if (!API_KEY || !API_SECRET) {
-        return res.status(500).json({ error: 'API keys not configured' });
-    }
-    
-    try {
-        // Get the document to see current state
-        const docResponse = await fetch(
-            `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["workflow_state"]`,
-            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
-        );
-        const docData = await docResponse.json();
-        
-        const currentState = docData.data?.workflow_state;
-        
-        // Get available transitions from this state
-        const response = await fetch(
-            `${ERP_URL}/api/method/frappe.desk.form.utils.get_workflow_actions?doctype=${doctype}&docname=${docname}`,
-            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
-        );
-        const result = await response.json();
-        
-        res.json({ 
-            success: true, 
-            currentState: currentState,
-            actions: result.message || []
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Apply workflow action (Approve/Reject/etc)
-app.post('/api/workflow-action', async (req, res) => {
-    const { doctype, docname, action, remark } = req.body;
-    
-    if (!doctype || !docname || !action) {
-        return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    if (!API_KEY || !API_SECRET) {
-        return res.status(500).json({ error: 'API keys not configured' });
-    }
-    
-    try {
-        // Use ERPNext's standard workflow action method
-        const response = await fetch(
-            `${ERP_URL}/api/method/frappe.desk.doctype.workflow_action.workflow_action.apply_workflow`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `token ${API_KEY}:${API_SECRET}`
-                },
-                body: JSON.stringify({
-                    doctype: doctype,
-                    docname: docname,
-                    action: action,
-                    remark: remark || ''
-                })
-            }
-        );
-        const result = await response.json();
-        
-        if (response.ok) {
-            res.json({ success: true, message: result.message });
-        } else {
-            res.status(400).json({ error: result.message || result.exc || 'Action failed' });
-        }
-    } catch (error) {
-        console.error('Workflow action error:', error);
         res.status(500).json({ error: error.message });
     }
 });
