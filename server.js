@@ -411,6 +411,190 @@ app.get('/api/debug/all-leave-allocations', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
+// ============================================
+// DYNAMIC WORKFLOW APPROVAL ENDPOINTS
+// ============================================
+
+// Get pending approvals for a user - DYNAMIC
+app.get('/api/approvals/:email', async (req, res) => {
+    const email = decodeURIComponent(req.params.email);
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Get employee record to find user's roles
+        const empResponse = await fetch(
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","designation"]&limit=1`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const empData = await empResponse.json();
+        
+        if (!empData.data || empData.data.length === 0) {
+            return res.json({ success: true, approvals: [] });
+        }
+        
+        const employee = empData.data[0];
+        
+        // Get ALL workflow actions where this user can act
+        // This queries the Workflow Action permission table
+        const wfResponse = await fetch(
+            `${ERP_URL}/api/resource/Workflow%20Action?fields=["*"]&limit=50`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const wfData = await wfResponse.json();
+        
+        // Get user's roles
+        const userResponse = await fetch(
+            `${ERP_URL}/api/resource/User/${email}?fields=["roles"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const userData = await userResponse.json();
+        
+        // Build list of documents pending approval
+        const approvals = [];
+        
+        for (const action of (wfData.data || [])) {
+            // Check if this user's role can perform this action
+            const userRoles = (userData.data?.roles || []).map(r => r.role);
+            if (!userRoles.includes(action.permitted_role)) continue;
+            
+            // Find documents in the "pending" state for this workflow
+            try {
+                const docResponse = await fetch(
+                    `${ERP_URL}/api/resource/${action.reference_doctype}?filters=[["workflow_state","=","${action.status}"]]&fields=["name","title","workflow_state","owner","modified"]&limit=20`,
+                    { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+                );
+                const docData = await docResponse.json();
+                
+                for (const doc of (docData.data || [])) {
+                    approvals.push({
+                        doctype: action.reference_doctype,
+                        docname: doc.name,
+                        title: doc.title || doc.name,
+                        state: doc.workflow_state,
+                        next_action: action.action,
+                        owner: doc.owner,
+                        modified: doc.modified
+                    });
+                }
+            } catch (e) {
+                // Skip doctypes that don't have workflow_state field
+                continue;
+            }
+        }
+        
+        res.json({ success: true, approvals });
+    } catch (error) {
+        console.error('Approvals error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get available workflow actions for a document
+app.get('/api/workflow-actions/:doctype/:docname', async (req, res) => {
+    const { doctype, docname } = req.params;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Get the document to see current state
+        const docResponse = await fetch(
+            `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["workflow_state"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const docData = await docResponse.json();
+        
+        const currentState = docData.data?.workflow_state;
+        
+        // Get available transitions from this state
+        const response = await fetch(
+            `${ERP_URL}/api/method/frappe.desk.form.utils.get_workflow_actions?doctype=${doctype}&docname=${docname}`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const result = await response.json();
+        
+        res.json({ 
+            success: true, 
+            currentState: currentState,
+            actions: result.message || []
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Apply workflow action (Approve/Reject/etc)
+app.post('/api/workflow-action', async (req, res) => {
+    const { doctype, docname, action, remark } = req.body;
+    
+    if (!doctype || !docname || !action) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Use ERPNext's standard workflow action method
+        const response = await fetch(
+            `${ERP_URL}/api/method/frappe.desk.doctype.workflow_action.workflow_action.apply_workflow`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `token ${API_KEY}:${API_SECRET}`
+                },
+                body: JSON.stringify({
+                    doctype: doctype,
+                    docname: docname,
+                    action: action,
+                    remark: remark || ''
+                })
+            }
+        );
+        const result = await response.json();
+        
+        if (response.ok) {
+            res.json({ success: true, message: result.message });
+        } else {
+            res.status(400).json({ error: result.message || result.exc || 'Action failed' });
+        }
+    } catch (error) {
+        console.error('Workflow action error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get print format HTML for any document
+app.get('/api/print-format/:doctype/:docname', async (req, res) => {
+    const { doctype, docname } = req.params;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await fetch(
+            `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${docname}&doctype=${doctype}&print_format=Standard`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const result = await response.json();
+        
+        res.json({ 
+            success: true, 
+            html: result.message?.html || 'No print format available'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 404 handler
 app.use((req, res) => {
     console.log(`404 - Route not found: ${req.method} ${req.path}`);
