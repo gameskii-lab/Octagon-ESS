@@ -319,6 +319,35 @@ app.post('/api/leave-application', async (req, res) => {
     }
 });
 
+// DEBUG: Check what Leave Allocation records exist
+app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    console.log(`🐛 DEBUG: Checking leave allocations for ${employeeId}`);
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Get ALL leave allocations for this employee (no date/docstatus filter)
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"]]&fields=["*"]&limit=10`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const data = await response.json();
+        
+        res.json({ 
+            count: data.data?.length || 0,
+            allocations: data.data || [],
+            employeeId: employeeId
+        });
+    } catch (error) {
+        console.error('Debug error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 404 handler
 app.use((req, res) => {
     console.log(`404 - Route not found: ${req.method} ${req.path}`);
