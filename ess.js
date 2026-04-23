@@ -585,20 +585,77 @@ async function loadLeaveBalance() {
         const response = await fetch(`${config.middlewareUrl}/api/leave-balance/${config.employeeId}`);
         const result = await response.json();
         
-        console.log('🔍 Leave balance result:', result);  // 👈 ADD THIS
+        console.log('🔍 Leave balance result:', result);
+        
+        // Get the leave type select element
+        const leaveTypeSelect = document.getElementById('leaveType');
         
         if (result.success && result.balances && result.balances.length > 0) {
-            // ... existing code ...
+            // Build leave balance summary
+            let html = '';
+            result.balances.forEach(b => {
+                const remaining = (b.leaves_allocated || 0) - (b.leaves_taken || 0);
+                html += `
+                    <div class="leave-type">
+                        <div class="count">${remaining}</div>
+                        <div class="label">${b.leave_type}</div>
+                    </div>
+                `;
+            });
+            document.getElementById('leaveBalanceSummary').innerHTML = html;
+            
+            // 🔥 UPDATE DROPDOWN: Only show allocated leave types
+            if (leaveTypeSelect) {
+                // Clear existing options
+                leaveTypeSelect.innerHTML = '<option value="">Select Leave Type</option>';
+                
+                // Add only allocated leave types
+                result.balances.forEach(b => {
+                    const remaining = (b.leaves_allocated || 0) - (b.leaves_taken || 0);
+                    if (remaining > 0) {  // Only show if they have remaining balance
+                        const option = document.createElement('option');
+                        option.value = b.leave_type;
+                        option.textContent = `${b.leave_type} (${remaining} days available)`;
+                        leaveTypeSelect.appendChild(option);
+                    }
+                });
+                
+                // If no options were added, show a message
+                if (leaveTypeSelect.options.length === 1) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No leave types with balance available';
+                    option.disabled = true;
+                    leaveTypeSelect.appendChild(option);
+                }
+            }
+            
         } else if (result.success && result.balances && result.balances.length === 0) {
-            console.log('✅ Showing "No leave allocations"');  // 👈 ADD THIS
+            console.log('✅ Showing "No leave allocations"');
             document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">No leave allocations found</p>';
+            
+            // 🔥 UPDATE DROPDOWN: Show "No leave types available"
+            if (leaveTypeSelect) {
+                leaveTypeSelect.innerHTML = '<option value="">No leave types available</option>';
+            }
+            
         } else {
-            console.log('⚠️ API returned unexpected format');  // 👈 ADD THIS
+            console.log('⚠️ API returned unexpected format');
             document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">Unable to load leave balance</p>';
+            
+            // Keep default options but disable them
+            if (leaveTypeSelect) {
+                leaveTypeSelect.innerHTML = '<option value="">Unable to load leave types</option>';
+            }
         }
     } catch (error) {
         console.error('Error loading leave balance:', error);
         document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">Error loading balance</p>';
+        
+        const leaveTypeSelect = document.getElementById('leaveType');
+        if (leaveTypeSelect) {
+            leaveTypeSelect.innerHTML = '<option value="">Error loading leave types</option>';
+        }
     }
 }
 
