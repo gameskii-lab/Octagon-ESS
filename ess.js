@@ -573,6 +573,12 @@ function updateDrawerInfo() {
 // ============================================
 // LEAVE FUNCTIONS
 // ============================================
+async function refreshLeaveData() {
+    showLeaveStatus('Refreshing leave data...', 'info');
+    await loadLeaveBalance();
+    await loadLeaveRequests();
+    showLeaveStatus('Leave data updated!', 'success');
+}
 
 async function loadLeaveScreen() {
     if (!config.employeeId) return;
