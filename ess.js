@@ -15,9 +15,14 @@ let config = {
 };
 
 // Initialize on page load
-// Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
+    // 🔥 FORCE HEADER HIDDEN ON PAGE LOAD
+    const appHeader = document.getElementById('appHeader');
+    if (appHeader) appHeader.classList.add('hidden');
+    
     getLocation();
+    // ... rest of code
+});
     
     // Check if already logged in
     const savedConfig = localStorage.getItem('erpnext_config');
