@@ -37,8 +37,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 👤 ${employeeName}<br>
                 🏢 ${currentEmployee.department || 'N/A'}<br>
                 💼 ${currentEmployee.designation || 'N/A'}<br>
-                <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
-                    ${config.employmentType}
+                <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : (config.employmentType === 'Full-time' ? 'badge-office' : 'badge-warning')}">
+                    ${config.employmentType || 'Not Set'}
                 </span>
             `;
         }
@@ -160,7 +160,7 @@ async function handleLogin() {
         
         currentEmployee = empResult.employee;
         config.employeeId = currentEmployee.id;
-        config.employmentType = currentEmployee.employment_type || 'Full-time';
+        config.employmentType = currentEmployee.employment_type || 'Daily Wage';
         userEmail = email;
         
         // Update drawer info with employee name
@@ -182,8 +182,8 @@ async function handleLogin() {
                 👤 ${employeeName}<br>
                 🏢 ${currentEmployee.department || 'N/A'}<br>
                 💼 ${currentEmployee.designation || 'N/A'}<br>
-                <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : 'badge-office'}">
-                    ${config.employmentType}
+                <span class="badge ${config.employmentType === 'Daily Wage' ? 'badge-field' : (config.employmentType === 'Full-time' ? 'badge-office' : 'badge-warning')}">
+                    ${config.employmentType || 'Not Set'}
                 </span>
             `;
         }
