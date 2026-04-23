@@ -233,7 +233,7 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     try {
         // Query with date validation - only allocations valid TODAY
         const response = await fetch(
-            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employee}"],["docstatus","=",1],["from_date","<=","${today}"],["to_date",">=","${today}"]]&fields=["leave_type","total_leaves_allocated","leaves_taken","from_date","to_date"]`,
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1],["from_date","<=","${today}"],["to_date",">=","${today}"]]&fields=["leave_type","total_leaves_allocated","leaves_taken","from_date","to_date"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         
