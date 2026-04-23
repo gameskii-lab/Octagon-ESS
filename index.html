@@ -392,41 +392,10 @@
                 <div class="drawer-item" onclick="navigateTo('schedule')">
                     <span class="icon">📋</span> Schedule
                 </div>
-                <div class="drawer-item" onclick="logout()">
-                    <span class="icon">🚪</span> Sign Out
-                </div>
                 <div class="drawer-item" onclick="navigateTo('approvals')">
                     <span class="icon">✅</span> Approvals
                 </div>
             </div>
-        </div>
-
-        <!-- Approvals Screen -->
-        <div id="approvalsScreen" class="screen">
-            <div class="card">
-                <div class="card-title">📋 Pending Approvals</div>
-                <div id="approvalsList">
-                    <p style="color: #666; text-align: center;">Loading approvals...</p>
-                </div>
-            </div>
-            
-            <!-- Approval Detail View (shown when a document is selected) -->
-            <div id="approvalDetail" class="card hidden">
-                <div class="card-title" id="approvalDetailTitle">Document</div>
-                <div id="approvalPrintView" style="max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px;">
-                </div>
-                <div style="margin-top: 12px;">
-                    <label>Remark (optional)</label>
-                    <textarea id="approvalRemark" rows="2" placeholder="Add a remark..."></textarea>
-                </div>
-                <div class="flex-row" style="margin-top: 12px;">
-                    <button id="approveBtn" style="background: #4CAF50;">✅ Approve</button>
-                    <button id="rejectBtn" style="background: #f44336;">❌ Reject</button>
-                </div>
-                <button class="secondary" onclick="showApprovalsList()" style="margin-top: 8px;">← Back to list</button>
-            </div>
-            
-            <div id="approvalStatusMessage"></div>
         </div>
         
         <!-- App Header - Hidden by default -->
@@ -535,7 +504,35 @@
                 
                 <div id="leaveStatusMessage"></div>
             </div>
+
+        <!-- Approvals Screen -->
+        <div id="approvalsScreen" class="screen">
+            <div class="card">
+                <div class="card-title">📋 Pending Approvals</div>
+                <div id="approvalsList">
+                    <p style="color: #666; text-align: center;">Loading approvals...</p>
+                </div>
+            </div>
             
+            <!-- Approval Detail View (shown when a document is selected) -->
+            <div id="approvalDetail" class="card hidden">
+                <div class="card-title" id="approvalDetailTitle">Document</div>
+                <div id="approvalPrintView" style="max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px;">
+                </div>
+                <div style="margin-top: 12px;">
+                    <label>Remark (optional)</label>
+                    <textarea id="approvalRemark" rows="2" placeholder="Add a remark..."></textarea>
+                </div>
+                <div class="flex-row" style="margin-top: 12px;">
+                    <button id="approveBtn" style="background: #4CAF50;">✅ Approve</button>
+                    <button id="rejectBtn" style="background: #f44336;">❌ Reject</button>
+                </div>
+                <button class="secondary" onclick="showApprovalsList()" style="margin-top: 8px;">← Back to list</button>
+            </div>
+            
+            <div id="approvalStatusMessage"></div>
+        </div>
+
             <!-- Payslips Screen -->
             <div id="payslipsScreen" class="screen">
                 <div class="card">
