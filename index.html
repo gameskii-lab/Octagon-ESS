@@ -448,12 +448,17 @@
             </div>
             
             <!-- Leave Screen -->
-            <div id="leaveScreen" class="screen">
-                <div class="card">
-                    <div class="card-title">🏖️ Leave Balance</div>
-                    <div class="leave-balance-summary" id="leaveBalanceSummary">
-                        Loading...
+                <div id="leaveScreen" class="screen">
+                    <div class="card">
+                        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>🏖️ Leave Balance</span>
+                            <button onclick="refreshLeaveData()" style="width: auto; padding: 6px 12px; font-size: 14px; background: #6c757d;">🔄 Refresh</button>
+                        </div>
+                        <div class="leave-balance-summary" id="leaveBalanceSummary">
+                            Loading...
+                        </div>
                     </div>
+                    <!-- rest of leave screen -->
                 </div>
                 
                 <div class="card">
