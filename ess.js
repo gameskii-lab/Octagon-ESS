@@ -17,7 +17,6 @@ let config = {
 // Initialize on page load
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    displayDate();
     getLocation();
     
     // Check if already logged in
@@ -61,9 +60,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function displayDate() {
+    const dateEl = document.getElementById('dateDisplay');
+    if (!dateEl) return;  // 👈 ADD THIS
     const now = new Date();
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('dateDisplay').textContent = now.toLocaleDateString('en-US', options);
+    dateEl.textContent = now.toLocaleDateString('en-US', options);
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
