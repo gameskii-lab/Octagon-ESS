@@ -222,7 +222,6 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
 // Get leave balance
 app.get('/api/leave-balance/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
-    const today = new Date().toISOString().split('T')[0];
     
     console.log(`🔍 Fetching leave balance for employee: ${employeeId}`);
     
@@ -231,7 +230,13 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     }
     
     try {
-        // Query with date validation - only allocations valid TODAY
+        // SIMPLIFIED QUERY - No date filters for now
+        const url = `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["leave_type","total_leaves_allocated","leaves_taken"]`;
+        console.log('URL:', url);
+        
+        const response = await fetch(url, {
+            headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        });
         
         const data = await response.json();
         console.log(`📊 Leave Allocation response:`, data.data?.length || 0, 'records found');
@@ -239,15 +244,14 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
         const balances = (data.data || []).map(alloc => ({
             leave_type: alloc.leave_type,
             leaves_allocated: alloc.total_leaves_allocated || 0,
-            leaves_taken: alloc.leaves_taken || 0,
-            from_date: alloc.from_date,
-            to_date: alloc.to_date
+            leaves_taken: alloc.leaves_taken || 0
         }));
         
         res.json({ success: true, balances });
     } catch (error) {
-        console.error('Leave balance error:', error);
-        res.status(500).json({ error: 'Server error fetching leave balance' });
+        console.error('Leave balance error:', error.message);
+        console.error('Full error:', error);
+        res.status(500).json({ error: 'Server error fetching leave balance', details: error.message });
     }
 });
 
