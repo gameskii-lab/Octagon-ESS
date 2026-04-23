@@ -350,6 +350,22 @@
         .app-header.hidden {
             display: none !important;
         }
+        /* Force login screen to be the only visible screen on page load */
+        #loginScreen {
+            display: block !important;
+        }
+        #dashboardScreen, #leaveScreen, #payslipsScreen, #scheduleScreen, #profileScreen {
+            display: none !important;
+        }
+        .screen.active {
+            display: block !important;
+        }
+        #appHeader {
+            display: none !important;
+        }
+        #appHeader.visible {
+            display: flex !important;
+        }
     </style>
 </head>
 <body>
@@ -458,8 +474,6 @@
                             Loading...
                         </div>
                     </div>
-                    <!-- rest of leave screen -->
-                </div>
                 
                 <div class="card">
                     <div class="card-title">📝 Apply for Leave</div>
@@ -489,6 +503,7 @@
                 </div>
                 
                 <div id="leaveStatusMessage"></div>
+            </div>
             </div>
             
             <!-- Payslips Screen -->
@@ -527,6 +542,6 @@
         </div>
     </div>
 
-    <script src="ess.js?v=2"></script>
+    <script src="ess.js?v=3"></script>
 </body>
 </html>
