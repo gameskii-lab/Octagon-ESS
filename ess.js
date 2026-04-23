@@ -29,6 +29,82 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     getLocation();
     
+    // 🔥 ATTACH CHECK-IN EVENT LISTENER HERE
+    const checkBtn = document.getElementById('checkBtn');
+    if (checkBtn) {
+        checkBtn.addEventListener('click', async () => {
+            if (!currentLocation) {
+                showStatus('Location not available. Please enable GPS.', 'error');
+                getLocation();
+                return;
+            }
+            
+            // Geofencing validation
+            if (config.siteLat && config.siteLng) {
+                const distance = calculateDistance(
+                    currentLocation.latitude,
+                    currentLocation.longitude,
+                    config.siteLat,
+                    config.siteLng
+                );
+                
+                if (distance > config.siteRadius) {
+                    showStatus(
+                        `📍 You are ${Math.round(distance)}m from ${config.shiftLocationName || 'worksite'}. Allowed: ${config.siteRadius}m. Check-in denied.`,
+                        'error'
+                    );
+                    return;
+                }
+                
+                console.log(`✅ Distance to ${config.shiftLocationName}: ${Math.round(distance)}m`);
+            }
+            
+            const btn = document.getElementById('checkBtn');
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+            
+            const logType = currentStatus === 'IN' ? 'OUT' : 'IN';
+            
+            try {
+                const now = new Date();
+                const timestamp = now.getFullYear() + '-' + 
+                    String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(now.getDate()).padStart(2, '0') + ' ' + 
+                    String(now.getHours()).padStart(2, '0') + ':' + 
+                    String(now.getMinutes()).padStart(2, '0') + ':' + 
+                    String(now.getSeconds()).padStart(2, '0');
+                
+                const response = await fetch(`${config.middlewareUrl}/api/checkin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employeeId: config.employeeId,
+                        logType: logType,
+                        timestamp: timestamp
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentStatus = logType;
+                    updateButtonState();
+                    showStatus(`✅ Successfully checked ${logType.toLowerCase()} at ${now.toLocaleTimeString()}`, 'success');
+                    
+                    if (config.employmentType === 'Daily Wage') {
+                        setTimeout(loadFieldWorkerDashboard, 1000);
+                    }
+                } else {
+                    throw new Error(result.error || 'Check-in failed');
+                }
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    }
+    
     // Check if already logged in
     const savedConfig = localStorage.getItem('erpnext_config');
     const savedEmployee = localStorage.getItem('currentEmployee');
