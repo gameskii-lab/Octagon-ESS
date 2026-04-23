@@ -230,22 +230,19 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     }
     
     try {
-        // Use correct field names for ERPNext
-        const url = `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["leave_type","new_leaves_allocated","total_leaves_allocated","leaves_taken"]`;
-        console.log('URL:', url);
-        
-        const response = await fetch(url, {
-            headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-        });
+        // Use EXACT same working approach as the debug endpoint
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
         
         const data = await response.json();
         console.log(`📊 Leave Allocation response:`, data.data?.length || 0, 'records found');
         
         const balances = (data.data || []).map(alloc => ({
             leave_type: alloc.leave_type,
-            // Try both possible field names
-            leaves_allocated: alloc.new_leaves_allocated || alloc.total_leaves_allocated || alloc.leaves_allocated || 0,
-            leaves_taken: alloc.leaves_taken || 0
+            leaves_allocated: alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0,
+            leaves_taken: 0
         }));
         
         res.json({ success: true, balances });
