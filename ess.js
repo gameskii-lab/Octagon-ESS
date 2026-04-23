@@ -253,11 +253,23 @@ function showAppSection() {
     const dashboardScreen = document.getElementById('dashboardScreen');
     const appHeader = document.getElementById('appHeader');
     
-    if (loginScreen) loginScreen.classList.remove('active');
-    if (dashboardScreen) dashboardScreen.classList.add('active');
+    // Hide login screen
+    if (loginScreen) {
+        loginScreen.classList.remove('active');
+        loginScreen.style.display = 'none';
+    }
+    
+    // Show dashboard screen
+    if (dashboardScreen) {
+        dashboardScreen.classList.add('active');
+        dashboardScreen.style.display = 'block';
+    }
+    
+    // Show header
     if (appHeader) {
         appHeader.classList.add('visible');
         appHeader.style.display = 'flex';
+        appHeader.classList.remove('hidden');
     }
     
     document.getElementById('screenTitle').textContent = 'Dashboard';
@@ -489,15 +501,26 @@ function logout() {
     if (appHeader) {
         appHeader.classList.remove('visible');
         appHeader.style.display = 'none';
+        appHeader.classList.add('hidden');
     }
     
-    // Hide all screens, show login
+    // Hide all screens
     const screens = ['dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
     screens.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.classList.remove('active');
+        if (el) {
+            el.classList.remove('active');
+            el.style.display = 'none';
+        }
     });
-    document.getElementById('loginScreen').classList.add('active');
+    
+    // Show login screen
+    const loginScreen = document.getElementById('loginScreen');
+    if (loginScreen) {
+        loginScreen.classList.add('active');
+        loginScreen.style.display = 'block';
+    }
+    
     document.getElementById('screenTitle').textContent = 'Sign In';
     document.getElementById('loginEmail').value = '';
     document.getElementById('loginPassword').value = '';
@@ -549,12 +572,18 @@ function navigateTo(screen) {
     const screens = ['loginScreen', 'dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
     screens.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.classList.remove('active');
+        if (el) {
+            el.classList.remove('active');
+            el.style.display = 'none';
+        }
     });
     
     // Show selected screen
     const activeScreen = document.getElementById(screen + 'Screen');
-    if (activeScreen) activeScreen.classList.add('active');
+    if (activeScreen) {
+        activeScreen.classList.add('active');
+        activeScreen.style.display = 'block';
+    }
     
     // Update header title
     const titles = {
