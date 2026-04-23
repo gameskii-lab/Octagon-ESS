@@ -585,21 +585,15 @@ async function loadLeaveBalance() {
         const response = await fetch(`${config.middlewareUrl}/api/leave-balance/${config.employeeId}`);
         const result = await response.json();
         
+        console.log('🔍 Leave balance result:', result);  // 👈 ADD THIS
+        
         if (result.success && result.balances && result.balances.length > 0) {
-            let html = '';
-            result.balances.forEach(b => {
-                const remaining = (b.leaves_allocated || 0) - (b.leaves_taken || 0);
-                html += `
-                    <div class="leave-type">
-                        <div class="count">${remaining}</div>
-                        <div class="label">${b.leave_type}</div>
-                    </div>
-                `;
-            });
-            document.getElementById('leaveBalanceSummary').innerHTML = html;
+            // ... existing code ...
         } else if (result.success && result.balances && result.balances.length === 0) {
+            console.log('✅ Showing "No leave allocations"');  // 👈 ADD THIS
             document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">No leave allocations found</p>';
         } else {
+            console.log('⚠️ API returned unexpected format');  // 👈 ADD THIS
             document.getElementById('leaveBalanceSummary').innerHTML = '<p style="text-align: center; padding: 20px;">Unable to load leave balance</p>';
         }
     } catch (error) {
