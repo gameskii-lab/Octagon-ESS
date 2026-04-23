@@ -350,7 +350,40 @@ app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
+// DEBUG: Get Leave Allocation doctype metadata
+app.get('/api/debug/leave-allocation-meta', async (req, res) => {
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Get the doctype metadata
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Allocation?fields=["*"]&limit=1`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const data = await response.json();
+        
+        // If we got a record, show its fields
+        if (data.data && data.data.length > 0) {
+            const record = data.data[0];
+            res.json({
+                success: true,
+                fields: Object.keys(record),
+                sample: record
+            });
+        } else {
+            res.json({
+                success: true,
+                message: 'No Leave Allocation records found in the system',
+                fields: []
+            });
+        }
+    } catch (error) {
+        console.error('Meta debug error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 // 404 handler
 app.use((req, res) => {
     console.log(`404 - Route not found: ${req.method} ${req.path}`);
