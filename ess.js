@@ -750,11 +750,14 @@ async function loadLeaveRequests() {
 }
 
 async function submitLeaveApplication() {
-    const leaveType = document.getElementById('leaveType').value;
+    const leaveTypeSelect = document.getElementById('leaveType');
+    const leaveType = leaveTypeSelect.options[leaveTypeSelect.selectedIndex]?.value || '';
     const fromDate = document.getElementById('leaveFromDate').value;
     const toDate = document.getElementById('leaveToDate').value;
     const halfDay = document.getElementById('leaveHalfDay').value;
     const reason = document.getElementById('leaveReason').value;
+    
+    console.log('📝 Submitting:', { leaveType, fromDate, toDate, halfDay, reason });
     
     if (!leaveType || !fromDate || !toDate || !reason) {
         showLeaveStatus('Please fill all fields', 'error');
@@ -762,8 +765,10 @@ async function submitLeaveApplication() {
     }
     
     const submitBtn = document.querySelector('#leaveScreen button');
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting...';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting...';
+    }
     
     try {
         const response = await fetch(`${config.middlewareUrl}/api/leave-application`, {
@@ -798,8 +803,10 @@ async function submitLeaveApplication() {
     } catch (error) {
         showLeaveStatus(`❌ Error: ${error.message}`, 'error');
     } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Leave Request';
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Leave Request';
+        }
     }
 }
 
