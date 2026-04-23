@@ -233,7 +233,7 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     try {
         // Query with date validation - only allocations valid TODAY
         const response = await fetch(
-            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1],["from_date","<=","${today}"],["to_date",">=","${today}"]]&fields=["leave_type","total_leaves_allocated","leaves_taken","from_date","to_date"]`,
+            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employee}"],["docstatus","=",1],["from_date","<=","${today}"],["to_date",">=","${today}"]]&fields=["leave_type","total_leaves_allocated","leaves_taken","from_date","to_date"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         
@@ -359,24 +359,4 @@ app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`📍 ERP_URL: ${ERP_URL}`);
     console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO'}`);
-});
-// DEBUG: Check what Leave Allocation fields exist
-app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    
-    try {
-        // Get ALL leave allocations without filters
-        const response = await fetch(
-            `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"]]&limit=5`,
-            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
-        );
-        const data = await response.json();
-        res.json({ 
-            count: data.data?.length || 0,
-            data: data.data,
-            employeeId: employeeId
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
 });
