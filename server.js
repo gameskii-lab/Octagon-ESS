@@ -388,6 +388,27 @@ app.get('/api/debug/leave-allocation-meta', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// DEBUG: See ALL Leave Allocations in the system
+app.get('/api/debug/all-leave-allocations', async (req, res) => {
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Get ALL Leave Allocations with all fields
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Allocation?fields=["*"]&limit=20`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const data = await response.json();
+        res.json({ 
+            count: data.data?.length || 0,
+            allocations: data.data || []
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // 404 handler
 app.use((req, res) => {
     console.log(`404 - Route not found: ${req.method} ${req.path}`);
