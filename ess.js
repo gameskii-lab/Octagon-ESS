@@ -16,13 +16,18 @@ let config = {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    // 🔥 FORCE HEADER HIDDEN ON PAGE LOAD
+    // 🔥 FORCE LOGIN SCREEN VISIBLE
+    const loginScreen = document.getElementById('loginScreen');
+    const dashboardScreen = document.getElementById('dashboardScreen');
+    const leaveScreen = document.getElementById('leaveScreen');
     const appHeader = document.getElementById('appHeader');
-    if (appHeader) appHeader.classList.add('hidden');
+    
+    if (loginScreen) loginScreen.style.display = 'block';
+    if (dashboardScreen) dashboardScreen.style.display = 'none';
+    if (leaveScreen) leaveScreen.style.display = 'none';
+    if (appHeader) appHeader.style.display = 'none';
     
     getLocation();
-    // ... rest of code
-});
     
     // Check if already logged in
     const savedConfig = localStorage.getItem('erpnext_config');
@@ -250,7 +255,10 @@ function showAppSection() {
     
     if (loginScreen) loginScreen.classList.remove('active');
     if (dashboardScreen) dashboardScreen.classList.add('active');
-    if (appHeader) appHeader.classList.remove('hidden');  // 👈 Show header
+    if (appHeader) {
+        appHeader.classList.add('visible');
+        appHeader.style.display = 'flex';
+    }
     
     document.getElementById('screenTitle').textContent = 'Dashboard';
     
@@ -478,7 +486,10 @@ function logout() {
     
     // Hide header
     const appHeader = document.getElementById('appHeader');
-    if (appHeader) appHeader.classList.add('hidden');
+    if (appHeader) {
+        appHeader.classList.remove('visible');
+        appHeader.style.display = 'none';
+    }
     
     // Hide all screens, show login
     const screens = ['dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen'];
