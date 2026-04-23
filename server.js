@@ -330,12 +330,19 @@ app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
     }
     
     try {
-        // Get ALL leave allocations for this employee (no date/docstatus filter)
+        // Get ALL leave allocations - NO DATE FILTER, NO DOCSTATUS FILTER
         const response = await fetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"]]&fields=["*"]&limit=10`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const data = await response.json();
+        
+        // Log each allocation's details
+        if (data.data) {
+            data.data.forEach(alloc => {
+                console.log(`Allocation: ${alloc.name}, docstatus: ${alloc.docstatus}, from: ${alloc.from_date}, to: ${alloc.to_date}`);
+            });
+        }
         
         res.json({ 
             count: data.data?.length || 0,
