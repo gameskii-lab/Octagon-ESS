@@ -594,6 +594,7 @@ function navigateTo(screen) {
         'payslips': 'Payslips',
         'schedule': 'Schedule',
         'profile': 'Profile'
+        'approvals': 'Approvals' 
     };
     const titleEl = document.getElementById('screenTitle');
     if (titleEl) titleEl.textContent = titles[screen] || 'Octagon ESS';
@@ -807,6 +808,131 @@ function showLeaveStatus(message, type) {
         statusDiv.className = '';
     }, 5000);
 }
+
+// ============================================
+// APPROVAL FUNCTIONS
+// ============================================
+let currentApprovalDoc = null;
+
+async function loadApprovalsScreen() {
+    document.getElementById('approvalsList').innerHTML = '<p style="color: #666; text-align: center;">Loading approvals...</p>';
+    document.getElementById('approvalDetail').classList.add('hidden');
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/approvals/${encodeURIComponent(userEmail)}`);
+        const result = await response.json();
+        
+        if (result.success && result.approvals && result.approvals.length > 0) {
+            let html = '';
+            result.approvals.forEach(approval => {
+                html += `
+                    <div class="leave-request-item" onclick="viewApproval('${approval.doctype}', '${approval.docname}', '${approval.next_action || 'Approve'}')" style="cursor: pointer;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <div>
+                                <strong>${approval.title}</strong>
+                                <div style="font-size: 12px; color: #666;">${approval.doctype}</div>
+                            </div>
+                            <span class="leave-status status-pending">${approval.state || 'Pending'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('approvalsList').innerHTML = html;
+        } else {
+            document.getElementById('approvalsList').innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No pending approvals</p>';
+        }
+    } catch (error) {
+        document.getElementById('approvalsList').innerHTML = '<p style="color: #666;">Error loading approvals</p>';
+    }
+}
+
+async function viewApproval(doctype, docname, nextAction) {
+    currentApprovalDoc = { doctype, docname, nextAction };
+    
+    // Show loading
+    document.getElementById('approvalDetail').classList.remove('hidden');
+    document.getElementById('approvalDetailTitle').textContent = `${doctype}: ${docname}`;
+    document.getElementById('approvalPrintView').innerHTML = '<p>Loading document...</p>';
+    
+    // Update buttons based on available actions
+    document.getElementById('approveBtn').style.display = 'block';
+    document.getElementById('rejectBtn').style.display = 'block';
+    document.getElementById('approveBtn').textContent = `✅ ${nextAction || 'Approve'}`;
+    
+    // Fetch print format
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/print-format/${doctype}/${docname}`);
+        const result = await response.json();
+        
+        if (result.success && result.html) {
+            document.getElementById('approvalPrintView').innerHTML = result.html;
+        } else {
+            document.getElementById('approvalPrintView').innerHTML = '<p>Could not load document view</p>';
+        }
+    } catch (error) {
+        document.getElementById('approvalPrintView').innerHTML = '<p>Error loading document</p>';
+    }
+    
+    // Set up buttons
+    document.getElementById('approveBtn').onclick = () => submitWorkflowAction('Approve');
+    document.getElementById('rejectBtn').onclick = () => submitWorkflowAction('Reject');
+}
+
+function showApprovalsList() {
+    document.getElementById('approvalDetail').classList.add('hidden');
+    currentApprovalDoc = null;
+}
+
+async function submitWorkflowAction(action) {
+    if (!currentApprovalDoc) return;
+    
+    const remark = document.getElementById('approvalRemark').value;
+    
+    const btn = action === 'Approve' ? document.getElementById('approveBtn') : document.getElementById('rejectBtn');
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/workflow-action`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                doctype: currentApprovalDoc.doctype,
+                docname: currentApprovalDoc.docname,
+                action: action,
+                remark: remark
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showApprovalStatus(`✅ ${action}d successfully!`, 'success');
+            document.getElementById('approvalRemark').value = '';
+            showApprovalsList();
+            // Refresh the list
+            setTimeout(loadApprovalsScreen, 500);
+        } else {
+            throw new Error(result.error || 'Action failed');
+        }
+    } catch (error) {
+        showApprovalStatus(`❌ ${error.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = action === 'Approve' ? `✅ Approve` : `❌ Reject`;
+    }
+}
+
+function showApprovalStatus(message, type) {
+    const statusDiv = document.getElementById('approvalStatusMessage');
+    statusDiv.className = `status ${type}`;
+    statusDiv.textContent = message;
+    setTimeout(() => {
+        statusDiv.textContent = '';
+        statusDiv.className = '';
+    }, 5000);
+}
+
 // ============================================
 // OTHER SCREEN FUNCTIONS (Placeholders)
 // ============================================
