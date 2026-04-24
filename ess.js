@@ -959,13 +959,229 @@ function loadPayslipsScreen() {
     `;
 }
 
-function loadScheduleScreen() {
-    document.getElementById('scheduleList').innerHTML = `
-        <p style="color: #666; text-align: center; padding: 20px;">
-            📋 Schedule view coming soon!<br>
-            <small>Your upcoming shifts will appear here</small>
-        </p>
-    `;
+// ============================================
+// SCHEDULE FUNCTIONS (Calendar View)
+// ============================================
+
+let currentMonth = new Date().getMonth();
+let currentYear = new Date().getFullYear();
+let scheduleData = { shifts: [], leaves: [], holidays: [] };
+
+function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+    } else if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+    }
+    renderCalendar();
+}
+
+async function loadScheduleScreen() {
+    if (!config.employeeId) return;
+    
+    document.getElementById('scheduleList').innerHTML = '<p style="color: #666; text-align: center;">Loading...</p>';
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/schedule/${config.employeeId}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            scheduleData = result;
+            currentMonth = new Date().getMonth();
+            currentYear = new Date().getFullYear();
+            renderCalendar();
+            renderUpcomingShifts();
+        } else {
+            document.getElementById('scheduleList').innerHTML = '<p style="color: #666;">Unable to load schedule</p>';
+        }
+    } catch (error) {
+        console.error('Schedule error:', error);
+        document.getElementById('scheduleList').innerHTML = '<p style="color: #666;">Error loading schedule</p>';
+    }
+}
+
+function renderCalendar() {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    document.getElementById('calendarMonth').textContent = `${monthNames[currentMonth]} ${currentYear}`;
+    
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const today = new Date().toISOString().split('T')[0];
+    
+    let gridHTML = '';
+    let dayCount = 0;
+    
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) {
+        gridHTML += '<div></div>';
+        dayCount++;
+    }
+    
+    // Day cells
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        // Determine day status
+        let status = 'off';
+        let label = '';
+        
+        // Check if work day
+        for (const shift of scheduleData.shifts) {
+            if (dateStr >= shift.start_date && dateStr <= shift.end_date) {
+                status = 'work';
+                label = shift.shift_type || 'Shift';
+                break;
+            }
+        }
+        
+        // Check if leave day
+        for (const leave of scheduleData.leaves) {
+            if (dateStr >= leave.from_date && dateStr <= leave.to_date) {
+                status = 'leave';
+                label = leave.leave_type || 'Leave';
+                break;
+            }
+        }
+        
+        // Check if holiday
+        for (const holiday of scheduleData.holidays) {
+            if (dateStr === holiday.holiday_date) {
+                status = 'holiday';
+                label = holiday.description || 'Holiday';
+                break;
+            }
+        }
+        
+        // Status colors
+        const statusColors = {
+            'work': { bg: '#d4edda', dot: '#4CAF50', text: '#155724' },
+            'leave': { bg: '#fff3cd', dot: '#ffc107', text: '#856404' },
+            'holiday': { bg: '#f8d7da', dot: '#f44336', text: '#721c24' },
+            'off': { bg: '#f5f5f5', dot: '#ccc', text: '#999' }
+        };
+        
+        const colors = statusColors[status];
+        const isToday = dateStr === today;
+        
+        gridHTML += `
+            <div onclick="showDayDetail('${dateStr}')" style="
+                padding: 6px 2px;
+                border-radius: 8px;
+                background: ${colors.bg};
+                cursor: pointer;
+                text-align: center;
+                ${isToday ? 'border: 2px solid #2196F3;' : ''}
+                transition: transform 0.1s;
+            " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 13px; font-weight: ${isToday ? 'bold' : 'normal'}; color: ${colors.text};">${day}</div>
+                <div style="width: 8px; height: 8px; border-radius: 50%; background: ${colors.dot}; margin: 3px auto 0;"></div>
+                ${label ? `<div style="font-size: 9px; color: ${colors.text}; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${label}</div>` : ''}
+            </div>
+        `;
+        
+        dayCount++;
+    }
+    
+    document.getElementById('calendarGrid').innerHTML = gridHTML;
+}
+
+function showDayDetail(dateStr) {
+    const detail = document.getElementById('dayDetail');
+    const title = document.getElementById('dayDetailTitle');
+    const content = document.getElementById('dayDetailContent');
+    
+    title.textContent = `📅 ${dateStr}`;
+    
+    let html = '';
+    let found = false;
+    
+    // Check shifts
+    for (const shift of scheduleData.shifts) {
+        if (dateStr >= shift.start_date && dateStr <= shift.end_date) {
+            found = true;
+            html += `
+                <div class="leave-request-item" style="border-left: 4px solid #4CAF50;">
+                    <strong>🟢 Work Day</strong><br>
+                    <span>Shift: ${shift.shift_type || 'Assigned'}</span><br>
+                    ${shift.shift_location ? `<span>📍 ${shift.shift_location}</span>` : ''}
+                </div>
+            `;
+        }
+    }
+    
+    // Check leaves
+    for (const leave of scheduleData.leaves) {
+        if (dateStr >= leave.from_date && dateStr <= leave.to_date) {
+            found = true;
+            html += `
+                <div class="leave-request-item" style="border-left: 4px solid #ffc107;">
+                    <strong>🟡 Leave Day</strong><br>
+                    <span>Type: ${leave.leave_type}</span>
+                </div>
+            `;
+        }
+    }
+    
+    // Check holidays
+    for (const holiday of scheduleData.holidays) {
+        if (dateStr === holiday.holiday_date) {
+            found = true;
+            html += `
+                <div class="leave-request-item" style="border-left: 4px solid #f44336;">
+                    <strong>🔴 Holiday</strong><br>
+                    <span>${holiday.description}</span>
+                </div>
+            `;
+        }
+    }
+    
+    if (!found) {
+        html = '<p style="color: #666; text-align: center; padding: 20px;">⚪ No schedule for this day</p>';
+    }
+    
+    content.innerHTML = html;
+    detail.classList.remove('hidden');
+    document.getElementById('calendarGrid').parentElement.parentElement.style.display = 'none';
+    document.getElementById('scheduleList').parentElement.style.display = 'none';
+}
+
+function hideDayDetail() {
+    document.getElementById('dayDetail').classList.add('hidden');
+    document.getElementById('calendarGrid').parentElement.parentElement.style.display = 'block';
+    document.getElementById('scheduleList').parentElement.style.display = 'block';
+}
+
+function renderUpcomingShifts() {
+    let html = '';
+    
+    if (scheduleData.shifts && scheduleData.shifts.length > 0) {
+        scheduleData.shifts.slice(0, 5).forEach(shift => {
+            html += `
+                <div class="leave-request-item">
+                    <div style="display: flex; justify-content: space-between;">
+                        <strong>${shift.shift_type || 'Shift'}</strong>
+                        <span class="leave-status status-approved">Confirmed</span>
+                    </div>
+                    <div style="font-size: 14px; color: #666; margin-top: 4px;">
+                        📅 ${shift.start_date} to ${shift.end_date}
+                    </div>
+                    ${shift.shift_location ? `
+                    <div style="font-size: 14px; color: #666;">
+                        📍 ${shift.shift_location}
+                    </div>` : ''}
+                </div>
+            `;
+        });
+    } else {
+        html = '<p style="color: #666; text-align: center; padding: 20px;">No upcoming shifts</p>';
+    }
+    
+    document.getElementById('scheduleList').innerHTML = html;
 }
 
 function loadProfileScreen() {
