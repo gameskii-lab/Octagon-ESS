@@ -80,7 +80,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     body: JSON.stringify({
                         employeeId: config.employeeId,
                         logType: logType,
-                        timestamp: timestamp
+                        timestamp: timestamp,
+                        latitude: currentLocation.latitude,   
+                        longitude: currentLocation.longitude   
                     })
                 });
                 
