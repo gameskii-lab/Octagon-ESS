@@ -667,6 +667,66 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
     }
 });
 
+// Get payslips for an employee
+app.get('/api/payslips/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured on server' });
+    }
+    
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/Salary%20Slip?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["name","start_date","end_date","gross_pay","net_pay","total_deduction","status","posting_date"]&order_by=posting_date%20desc&limit=12`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        
+        const payslips = (data.data || []).map(slip => ({
+            name: slip.name,
+            start_date: slip.start_date,
+            end_date: slip.end_date,
+            gross_pay: slip.gross_pay,
+            net_pay: slip.net_pay,
+            total_deduction: slip.total_deduction,
+            status: slip.status || 'Paid',
+            posting_date: slip.posting_date,
+            period: slip.start_date ? 
+                new Date(slip.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 
+                'N/A'
+        }));
+        
+        res.json({ success: true, payslips });
+    } catch (error) {
+        console.error('Payslips error:', error);
+        res.status(500).json({ error: 'Server error fetching payslips' });
+    }
+});
+
+// Get payslip print format
+app.get('/api/payslip-print/:payslipName', async (req, res) => {
+    const payslipName = req.params.payslipName;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${payslipName}&doctype=Salary%20Slip&print_format=Salary%20Slip%20Standard`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const result = await response.json();
+        
+        res.json({ 
+            success: true, 
+            html: result.message?.html || 'No print format available'
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============================================
 // 404 HANDLER
 // ============================================
