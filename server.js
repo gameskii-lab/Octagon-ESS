@@ -242,10 +242,14 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
 // CHECK-IN ENDPOINTS (No Cache - Real-time)
 // ============================================
 
+// Create check-in
 app.post('/api/checkin', async (req, res) => {
     const { employeeId, logType, timestamp } = req.body;
     
+    console.log('📝 Check-in request:', { employeeId, logType, timestamp });
+    
     if (!employeeId || !logType || !timestamp) {
+        console.log('❌ Missing fields');
         return res.status(400).json({ error: 'Missing required fields' });
     }
     if (!API_KEY || !API_SECRET) {
@@ -253,6 +257,14 @@ app.post('/api/checkin', async (req, res) => {
     }
     
     try {
+        const payload = {
+            employee: employeeId,
+            log_type: logType,
+            time: timestamp
+        };
+        
+        console.log('📤 Sending to ERPNext:', JSON.stringify(payload));
+        
         const response = await fetch(
             `${ERP_URL}/api/resource/Employee%20Checkin`,
             {
@@ -261,41 +273,27 @@ app.post('/api/checkin', async (req, res) => {
                     'Content-Type': 'application/json',
                     'Authorization': `token ${API_KEY}:${API_SECRET}`
                 },
-                body: JSON.stringify({ employee: employeeId, log_type: logType, time: timestamp })
+                body: JSON.stringify(payload)
             }
         );
+        
         const result = await response.json();
+        console.log('📥 ERPNext response status:', response.status);
+        console.log('📥 ERPNext response body:', JSON.stringify(result));
         
         if (response.ok && result.data) {
             res.json({ success: true, data: result.data });
         } else {
-            res.status(400).json({ error: result.message || 'Check-in failed' });
+            // Log the full error
+            console.log('❌ ERPNext rejected:', result);
+            res.status(400).json({ 
+                error: result.message || result._server_messages || 'Check-in failed',
+                details: result
+            });
         }
     } catch (error) {
         console.error('Check-in error:', error);
         res.status(500).json({ error: 'Server error during check-in' });
-    }
-});
-
-app.get('/api/today-checkins/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    const today = new Date().toISOString().split('T')[0];
-    
-    if (!API_KEY || !API_SECRET) {
-        return res.status(500).json({ error: 'API keys not configured on server' });
-    }
-    
-    try {
-        // No cache - check-ins need to be real-time
-        const response = await fetch(
-            `${ERP_URL}/api/resource/Employee%20Checkin?filters=[["employee","=","${employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`,
-            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
-        );
-        const data = await response.json();
-        res.json({ success: true, checkins: data.data || [] });
-    } catch (error) {
-        console.error('Check-ins fetch error:', error);
-        res.status(500).json({ error: 'Server error fetching check-ins' });
     }
 });
 
