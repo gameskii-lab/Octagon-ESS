@@ -172,43 +172,46 @@ app.get('/api/employee/:email', async (req, res) => {
 // ============================================
 
 // Get today's shift assignment
+// Get today's shift assignment
 app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     const today = new Date().toISOString().split('T')[0];
+    
+    console.log(`🔍 Shift assignment for ${employeeId} on ${today}`);
     
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
     
     try {
-        // Step 1: Get shift assignment for today
+        // Fetch shift assignment with ALL fields including shift_location
         const shiftResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&limit=1`,
+            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&fields=["*"]&limit=1`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const shiftData = await shiftResponse.json();
         
-        let shiftType = null;
-        let location = null;
+        console.log(`📊 Shift Assignment found:`, shiftData.data?.length || 0);
         
-        if (shiftData.data && shiftData.data.length > 0) {
-            shiftType = shiftData.data[0].shift_type;
+        if (!shiftData.data || shiftData.data.length === 0) {
+            return res.json({ success: true, assignment: null });
         }
         
-        // Step 2: Try to get location from Employee's default Shift Location
-        const empResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["shift_location","default_shift"]`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-        );
-        const empData = await empResponse.json();
+        const assignment = shiftData.data[0];
+        console.log(`  Shift Type: ${assignment.shift_type}`);
+        console.log(`  Shift Location field: ${assignment.shift_location}`);
         
-        // Check if employee has a default shift location
-        if (empData.data?.shift_location) {
+        let location = null;
+        
+        // If shift assignment has a direct shift_location field, use it
+        if (assignment.shift_location) {
+            console.log(`  Fetching location: ${assignment.shift_location}`);
             const locResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Shift%20Location/${empData.data.shift_location}`,
+                `${ERP_URL}/api/resource/Shift%20Location/${assignment.shift_location}`,
                 { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
             );
             const locData = await locResponse.json();
+            
             if (locData.data) {
                 location = {
                     name: locData.data.location_name || locData.data.name,
@@ -216,33 +219,16 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
                     longitude: locData.data.longitude,
                     radius: locData.data.checkin_radius || 100
                 };
-            }
-        }
-        
-        // Step 3: Fallback - get check-in radius from HR Settings
-        if (!location || !location.latitude) {
-            const hrResponse = await cachedGet(
-                `${ERP_URL}/api/resource/HR%20Settings`,
-                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-            );
-            const hrData = await hrResponse.json();
-            
-            if (hrData.data) {
-                location = {
-                    name: 'Default Worksite',
-                    latitude: hrData.data.default_checkin_latitude || null,
-                    longitude: hrData.data.default_checkin_longitude || null,
-                    radius: hrData.data.checkin_radius || 100
-                };
+                console.log(`  Location: ${location.name} (${location.latitude}, ${location.longitude})`);
             }
         }
         
         res.json({
             success: true,
             assignment: {
-                shift_type: shiftType,
-                start_date: today,
-                end_date: today,
+                shift_type: assignment.shift_type,
+                start_date: assignment.start_date,
+                end_date: assignment.end_date,
                 location: location
             }
         });
