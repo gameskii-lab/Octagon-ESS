@@ -950,13 +950,126 @@ function showApprovalStatus(message, type) {
 // OTHER SCREEN FUNCTIONS (Placeholders)
 // ============================================
 
-function loadPayslipsScreen() {
-    document.getElementById('payslipsList').innerHTML = `
-        <p style="color: #666; text-align: center; padding: 20px;">
-            💰 Payslip viewing coming soon!<br>
-            <small>Check back in the next update</small>
-        </p>
-    `;
+// ============================================
+// PAYSLIP FUNCTIONS
+// ============================================
+
+let currentPayslipDoc = null;
+
+async function loadPayslipsScreen() {
+    if (!config.employeeId) return;
+    
+    document.getElementById('payslipsList').innerHTML = '<p style="color: #666; text-align: center;">Loading payslips...</p>';
+    document.getElementById('payslipDetail').classList.add('hidden');
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/payslips/${config.employeeId}`);
+        const result = await response.json();
+        
+        if (result.success && result.payslips && result.payslips.length > 0) {
+            // Show latest payslip card
+            const latest = result.payslips[0];
+            const latestCard = document.getElementById('latestPayslipCard');
+            const latestContent = document.getElementById('latestPayslipContent');
+            
+            latestCard.classList.remove('hidden');
+            latestContent.innerHTML = `
+                <div style="font-size: 28px; font-weight: bold; color: #155724; margin-bottom: 4px;">
+                    ${formatCurrency(latest.net_pay)}
+                </div>
+                <div style="font-size: 14px; color: #666;">
+                    ${latest.period} • Net Pay
+                </div>
+                <div style="font-size: 12px; color: #999; margin-top: 4px;">
+                    Gross: ${formatCurrency(latest.gross_pay)} • Deductions: ${formatCurrency(latest.total_deduction)}
+                </div>
+                <button onclick="viewPayslipDetail('${latest.name}')" style="margin-top: 10px; padding: 8px 20px; font-size: 14px; width: auto; background: #1a73e8;">
+                    View Payslip
+                </button>
+            `;
+            
+            // Build list
+            let html = '';
+            result.payslips.forEach(slip => {
+                html += `
+                    <div class="leave-request-item" onclick="viewPayslipDetail('${slip.name}')" style="cursor: pointer;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>${slip.period}</strong>
+                                <div style="font-size: 12px; color: #666;">
+                                    Gross: ${formatCurrency(slip.gross_pay)} • Ded: ${formatCurrency(slip.total_deduction)}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: bold; color: #155724;">${formatCurrency(slip.net_pay)}</div>
+                                <span class="leave-status status-approved">${slip.status || 'Paid'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('payslipsList').innerHTML = html;
+        } else {
+            document.getElementById('latestPayslipCard').classList.add('hidden');
+            document.getElementById('payslipsList').innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No payslips found</p>';
+        }
+    } catch (error) {
+        console.error('Payslips error:', error);
+        document.getElementById('payslipsList').innerHTML = '<p style="color: #666;">Error loading payslips</p>';
+    }
+}
+
+async function viewPayslipDetail(payslipName) {
+    currentPayslipDoc = payslipName;
+    
+    document.getElementById('payslipDetail').classList.remove('hidden');
+    document.getElementById('payslipDetailTitle').textContent = `Payslip: ${payslipName}`;
+    document.getElementById('payslipPrintView').innerHTML = '<p style="text-align: center; padding: 20px;">Loading payslip...</p>';
+    
+    // Scroll to detail view
+    document.getElementById('payslipDetail').scrollIntoView({ behavior: 'smooth' });
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/payslip-print/${payslipName}`);
+        const result = await response.json();
+        
+        if (result.success && result.html) {
+            document.getElementById('payslipPrintView').innerHTML = result.html;
+        } else {
+            document.getElementById('payslipPrintView').innerHTML = '<p style="text-align: center; padding: 20px;">Could not load payslip view</p>';
+        }
+    } catch (error) {
+        document.getElementById('payslipPrintView').innerHTML = '<p style="text-align: center; padding: 20px;">Error loading payslip</p>';
+    }
+}
+
+function hidePayslipDetail() {
+    document.getElementById('payslipDetail').classList.add('hidden');
+    currentPayslipDoc = null;
+}
+
+function downloadPayslip() {
+    if (!currentPayslipDoc) return;
+    
+    // Open print format in new tab for download
+    window.open(`https://octagon-ess-middleware-rl71.onrender.com/api/payslip-print/${currentPayslipDoc}`, '_blank');
+    
+    showPayslipStatus('Opening payslip for download...', 'info');
+}
+
+function formatCurrency(amount) {
+    if (amount === null || amount === undefined) return 'N/A';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'BND' }).format(amount);
+}
+
+function showPayslipStatus(message, type) {
+    const statusDiv = document.getElementById('payslipStatusMessage');
+    statusDiv.className = `status ${type}`;
+    statusDiv.textContent = message;
+    setTimeout(() => {
+        statusDiv.textContent = '';
+        statusDiv.className = '';
+    }, 5000);
 }
 
 // ============================================
