@@ -15,6 +15,22 @@ app.use((req, res, next) => {
     next();
 });
 
+// Simple cache at top of server.js
+const cache = {};
+const CACHE_TTL = 60000; // 1 minute
+
+function getCached(key) {
+    const entry = cache[key];
+    if (entry && Date.now() - entry.time < CACHE_TTL) {
+        return entry.data;
+    }
+    return null;
+}
+
+function setCache(key, data) {
+    cache[key] = { data, time: Date.now() };
+}
+
 // Configuration from environment variables
 const ERP_URL = process.env.ERP_URL || 'https://erp.octagonerp.net';
 const API_KEY = process.env.API_KEY || '';
@@ -51,7 +67,7 @@ app.post('/api/login', async (req, res) => {
         return res.status(400).json({ error: 'Email and password required' });
     }
     try {
-        const response = await fetch(`${ERP_URL}/api/method/login`, {
+        const response = await cachedFetch(`${ERP_URL}/api/method/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ usr: email, pwd: password })
@@ -77,7 +93,7 @@ app.get('/api/employee/:email', async (req, res) => {
     }
     
     try {
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type"]&limit=1`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -117,7 +133,7 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
     try {
-        const shiftRes = await fetch(
+        const shiftRes = await cachedFetch(
             `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&limit=1`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -126,14 +142,14 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
             return res.json({ success: true, assignment: null });
         }
         const assignment = shiftData.data[0];
-        const typeRes = await fetch(
+        const typeRes = await cachedFetch(
             `${ERP_URL}/api/resource/Shift%20Type/${assignment.shift_type}`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const typeData = await typeRes.json();
         let location = null;
         if (typeData.data && typeData.data.shift_location) {
-            const locRes = await fetch(
+            const locRes = await cachedFetch(
                 `${ERP_URL}/api/resource/Shift%20Location/${typeData.data.shift_location}`,
                 { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
             );
@@ -172,7 +188,7 @@ app.post('/api/checkin', async (req, res) => {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
     try {
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Employee%20Checkin`,
             {
                 method: 'POST',
@@ -203,7 +219,7 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
     try {
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Employee%20Checkin?filters=[["employee","=","${employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -231,7 +247,7 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     
     try {
         // Use EXACT same working approach as the debug endpoint
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -259,7 +275,7 @@ app.get('/api/leave-requests/:employeeId', async (req, res) => {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
     try {
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"]]&fields=["leave_type","from_date","to_date","status","total_leave_days"]&order_by=creation%20desc&limit=10`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -309,7 +325,7 @@ app.post('/api/leave-application', async (req, res) => {
         
         console.log('📤 Sending to ERPNext:', JSON.stringify(payload));
         
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Application`,
             {
                 method: 'POST',
@@ -348,7 +364,7 @@ app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
     
     try {
         // Get ALL leave allocations - NO DATE FILTER, NO DOCSTATUS FILTER
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"]]&fields=["*"]&limit=10`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -380,7 +396,7 @@ app.get('/api/debug/leave-by-name/:docName', async (req, res) => {
     }
     
     try {
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Allocation/${docName}`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -398,7 +414,7 @@ app.get('/api/debug/all-leave-allocations', async (req, res) => {
     
     try {
         // Get ALL Leave Allocations with all fields
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?fields=["*"]&limit=20`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -428,7 +444,7 @@ app.get('/api/approvals/:email', async (req, res) => {
         const approvals = [];
         
         // First, get the employee record for this user
-        const empResponse = await fetch(
+        const empResponse = await cachedFetch(
             `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name"]&limit=1`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -449,14 +465,14 @@ app.get('/api/approvals/:email', async (req, res) => {
         // Get leave applications where:
         // - Status is 'Open' 
         // - Employee's leave approver is this user OR this user is HR Manager
-        const leaveAppResponse = await fetch(
+        const leaveAppResponse = await cachedFetch(
             `${ERP_URL}/api/resource/Leave%20Application?filters=[["status","=","Open"]]&fields=["name","employee","employee_name","leave_type","from_date","to_date","total_leave_days","creation","leave_approver"]&limit=20`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const leaveAppData = await leaveAppResponse.json();
         
         // Fetch user roles to check if HR Manager
-        const userResponse = await fetch(
+        const userResponse = await cachedFetch(
             `${ERP_URL}/api/resource/User/${email}`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
@@ -465,7 +481,7 @@ app.get('/api/approvals/:email', async (req, res) => {
         
         for (const app of (leaveAppData.data || [])) {
             // Check if this user is the Leave Approver for this employee
-            const approverEmpResponse = await fetch(
+            const approverEmpResponse = await cachedFetch(
                 `${ERP_URL}/api/resource/Employee/${app.employee}`,
                 { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
             );
@@ -495,7 +511,7 @@ app.get('/api/approvals/:email', async (req, res) => {
         // ============================================
         
         try {
-            const wfResponse = await fetch(
+            const wfResponse = await cachedFetch(
                 `${ERP_URL}/api/resource/Workflow%20Action?fields=["*"]&limit=50`,
                 { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
             );
@@ -505,7 +521,7 @@ app.get('/api/approvals/:email', async (req, res) => {
                 if (!userRoles.includes(action.permitted_role)) continue;
                 
                 try {
-                    const docResponse = await fetch(
+                    const docResponse = await cachedFetch(
                         `${ERP_URL}/api/resource/${action.reference_doctype}?filters=[["workflow_state","=","${action.status}"]]&fields=["name","title","workflow_state","owner","modified"]&limit=20`,
                         { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
                     );
@@ -551,7 +567,7 @@ app.get('/api/print-format/:doctype/:docname', async (req, res) => {
     }
     
     try {
-        const response = await fetch(
+        const response = await cachedFetch(
             `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${docname}&doctype=${doctype}&print_format=Standard`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
