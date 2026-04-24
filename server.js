@@ -619,6 +619,54 @@ app.get('/api/debug/all-leave-allocations', async (req, res) => {
     }
 });
 
+// Get upcoming schedule for an employee (next 30 days)
+app.get('/api/schedule/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    const today = new Date().toISOString().split('T')[0];
+    
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + 30);
+    const endDate = futureDate.toISOString().split('T')[0];
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured on server' });
+    }
+    
+    try {
+        // Fetch shift assignments
+        const shiftResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${endDate}"],["end_date",">=","${today}"]]&fields=["shift_type","start_date","end_date","shift_location"]&limit=30`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const shiftData = await shiftResponse.json();
+        
+        // Fetch approved leave applications
+        const leaveResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"],["status","=","Approved"],["from_date","<=","${endDate}"],["to_date",">=","${today}"]]&fields=["leave_type","from_date","to_date"]&limit=10`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const leaveData = await leaveResponse.json();
+        
+        // Fetch holidays
+        const holidayResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Holiday?filters=[["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const holidayData = await holidayResponse.json();
+        
+        res.json({
+            success: true,
+            shifts: shiftData.data || [],
+            leaves: leaveData.data || [],
+            holidays: holidayData.data || [],
+            period: { from: today, to: endDate }
+        });
+    } catch (error) {
+        console.error('Schedule error:', error);
+        res.status(500).json({ error: 'Server error fetching schedule' });
+    }
+});
+
 // ============================================
 // 404 HANDLER
 // ============================================
