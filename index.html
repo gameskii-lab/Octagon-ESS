@@ -545,29 +545,55 @@
             
             <!-- Schedule Screen -->
             <div id="scheduleScreen" class="screen">
-                <div class="card">
-                    <div class="card-title">📋 Upcoming Schedule</div>
+                <!-- Calendar Header -->
+                <div class="card" style="text-align: center;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <button onclick="changeMonth(-1)" style="width: auto; padding: 8px 12px; background: none; color: #333; font-size: 20px;">◀</button>
+                        <div class="card-title" id="calendarMonth" style="margin: 0;">April 2026</div>
+                        <button onclick="changeMonth(1)" style="width: auto; padding: 8px 12px; background: none; color: #333; font-size: 20px;">▶</button>
+                    </div>
+                    
+                    <!-- Day Headers -->
+                    <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px;">
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Sun</div>
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Mon</div>
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Tue</div>
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Wed</div>
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Thu</div>
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Fri</div>
+                        <div style="font-weight: bold; font-size: 12px; color: #666;">Sat</div>
+                    </div>
+                    
+                    <!-- Calendar Grid -->
+                    <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
+                    </div>
+                    
+                    <!-- Legend -->
+                    <div style="display: flex; justify-content: center; gap: 16px; margin-top: 12px; font-size: 11px; color: #666;">
+                        <span>🟢 Work</span>
+                        <span>🟡 Leave</span>
+                        <span>🔴 Holiday</span>
+                        <span>⚪ Off</span>
+                    </div>
+                </div>
+                
+                <!-- Day Detail Card (shown when a day is tapped) -->
+                <div id="dayDetail" class="card hidden">
+                    <div class="card-title" id="dayDetailTitle">Day Details</div>
+                    <div id="dayDetailContent"></div>
+                    <button class="secondary" onclick="hideDayDetail()" style="margin-top: 8px;">← Back to Calendar</button>
+                </div>
+                
+                <!-- Upcoming Shifts List -->
+                <div class="card" style="margin-top: 12px;">
+                    <div class="card-title">📋 Upcoming Shifts</div>
                     <div id="scheduleList">
-                        <p style="color: #666; text-align: center;">Loading schedule...</p>
+                        <p style="color: #666; text-align: center;">Loading...</p>
                     </div>
                 </div>
+                
+                <div id="scheduleStatusMessage"></div>
             </div>
-            
-            <!-- Profile Screen -->
-            <div id="profileScreen" class="screen">
-                <div class="card">
-                    <div class="card-title">👤 Profile</div>
-                    <div id="profileInfo">
-                        Loading...
-                    </div>
-                </div>
-                <button class="logout-btn" onclick="logout()">🚪 Sign Out</button>
-            </div>
-            
-            <!-- Global Status Message (available on all screens) -->
-            <div id="statusMessage"></div>
-        </div>
-    </div>
 
     <script src="ess.js?v=7"></script>
 </body>
