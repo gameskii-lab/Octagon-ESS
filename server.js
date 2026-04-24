@@ -244,13 +244,13 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
 
 // Create check-in
 app.post('/api/checkin', async (req, res) => {
-    const { employeeId, logType, timestamp } = req.body;
+    const { employeeId, logType, timestamp, latitude, longitude } = req.body;
     
-    console.log('📝 Check-in request:', { employeeId, logType, timestamp });
+    console.log('📝 Check-in request:', { employeeId, logType, timestamp, latitude, longitude });
     
     if (!employeeId || !logType || !timestamp) {
-        console.log('❌ Missing fields');
-        return res.status(400).json({ error: 'Missing required fields' });
+        console.log('❌ Missing required fields');
+        return res.status(400).json({ error: 'Missing required fields', details: 'employeeId, logType, and timestamp are required' });
     }
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
@@ -262,6 +262,12 @@ app.post('/api/checkin', async (req, res) => {
             log_type: logType,
             time: timestamp
         };
+        
+        // Include latitude/longitude if provided
+        if (latitude !== undefined && longitude !== undefined) {
+            payload.latitude = latitude;
+            payload.longitude = longitude;
+        }
         
         console.log('📤 Sending to ERPNext:', JSON.stringify(payload));
         
@@ -278,13 +284,11 @@ app.post('/api/checkin', async (req, res) => {
         );
         
         const result = await response.json();
-        console.log('📥 ERPNext response status:', response.status);
-        console.log('📥 ERPNext response body:', JSON.stringify(result));
         
         if (response.ok && result.data) {
+            // Clear the check-in cache so next fetch gets fresh data
             res.json({ success: true, data: result.data });
         } else {
-            // Log the full error
             console.log('❌ ERPNext rejected:', result);
             res.status(400).json({ 
                 error: result.message || result._server_messages || 'Check-in failed',
@@ -296,7 +300,6 @@ app.post('/api/checkin', async (req, res) => {
         res.status(500).json({ error: 'Server error during check-in' });
     }
 });
-
 // ============================================
 // LEAVE ENDPOINTS
 // ============================================
