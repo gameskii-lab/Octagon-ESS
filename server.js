@@ -171,6 +171,7 @@ app.get('/api/employee/:email', async (req, res) => {
 // SHIFT ASSIGNMENT ENDPOINTS (Cached GET)
 // ============================================
 
+// Get today's shift assignment
 app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     const today = new Date().toISOString().split('T')[0];
@@ -180,38 +181,58 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     }
     
     try {
-        const response = await cachedGet(
+        // Step 1: Get shift assignment for today
+        const shiftResponse = await cachedGet(
             `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&limit=1`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
-        const shiftData = await response.json();
+        const shiftData = await shiftResponse.json();
         
-        if (!shiftData.data || shiftData.data.length === 0) {
-            return res.json({ success: true, assignment: null });
+        let shiftType = null;
+        let location = null;
+        
+        if (shiftData.data && shiftData.data.length > 0) {
+            shiftType = shiftData.data[0].shift_type;
         }
         
-        const assignment = shiftData.data[0];
-        
-        // Fetch shift type
-        const typeResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Shift%20Type/${assignment.shift_type}`,
+        // Step 2: Try to get location from Employee's default Shift Location
+        const empResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["shift_location","default_shift"]`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
-        const typeData = await typeResponse.json();
+        const empData = await empResponse.json();
         
-        let location = null;
-        if (typeData.data && typeData.data.shift_location) {
+        // Check if employee has a default shift location
+        if (empData.data?.shift_location) {
             const locResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Shift%20Location/${typeData.data.shift_location}`,
+                `${ERP_URL}/api/resource/Shift%20Location/${empData.data.shift_location}`,
                 { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
             );
             const locData = await locResponse.json();
             if (locData.data) {
                 location = {
-                    name: locData.data.location_name,
+                    name: locData.data.location_name || locData.data.name,
                     latitude: locData.data.latitude,
                     longitude: locData.data.longitude,
-                    radius: locData.data.allowed_radius || 100
+                    radius: locData.data.checkin_radius || 100
+                };
+            }
+        }
+        
+        // Step 3: Fallback - get check-in radius from HR Settings
+        if (!location || !location.latitude) {
+            const hrResponse = await cachedGet(
+                `${ERP_URL}/api/resource/HR%20Settings`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const hrData = await hrResponse.json();
+            
+            if (hrData.data) {
+                location = {
+                    name: 'Default Worksite',
+                    latitude: hrData.data.default_checkin_latitude || null,
+                    longitude: hrData.data.default_checkin_longitude || null,
+                    radius: hrData.data.checkin_radius || 100
                 };
             }
         }
@@ -219,9 +240,9 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
         res.json({
             success: true,
             assignment: {
-                shift_type: assignment.shift_type,
-                start_date: assignment.start_date,
-                end_date: assignment.end_date,
+                shift_type: shiftType,
+                start_date: today,
+                end_date: today,
                 location: location
             }
         });
