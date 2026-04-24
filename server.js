@@ -727,6 +727,37 @@ app.get('/api/payslip-print/:payslipName', async (req, res) => {
     }
 });
 
+// DEBUG: Check all leave applications
+app.get('/api/debug/leave-applications', async (req, res) => {
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/Leave%20Application?fields=["*"]&limit=20`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        
+        res.json({ 
+            count: data.data?.length || 0,
+            applications: (data.data || []).map(app => ({
+                name: app.name,
+                employee: app.employee,
+                employee_name: app.employee_name,
+                leave_type: app.leave_type,
+                status: app.status,
+                from_date: app.from_date,
+                to_date: app.to_date,
+                leave_approver: app.leave_approver
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============================================
 // 404 HANDLER
 // ============================================
