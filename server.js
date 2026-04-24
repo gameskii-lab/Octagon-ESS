@@ -286,7 +286,12 @@ app.post('/api/checkin', async (req, res) => {
         const result = await response.json();
         
         if (response.ok && result.data) {
-            // Clear the check-in cache so next fetch gets fresh data
+            // Clear the today-checkins cache for this employee
+            const today = new Date().toISOString().split('T')[0];
+            const cacheKey = `${ERP_URL}/api/resource/Employee%20Checkin?filters=[["employee","=","${employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`;
+            delete cache[cacheKey];
+            console.log('🗑️ Cleared check-in cache for:', employeeId);
+            
             res.json({ success: true, data: result.data });
         } else {
             console.log('❌ ERPNext rejected:', result);
@@ -300,6 +305,7 @@ app.post('/api/checkin', async (req, res) => {
         res.status(500).json({ error: 'Server error during check-in' });
     }
 });
+
 // ============================================
 // LEAVE ENDPOINTS
 // ============================================
