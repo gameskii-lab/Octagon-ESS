@@ -1400,14 +1400,22 @@ function showDayDetail(dateStr) {
     
     content.innerHTML = html;
     detail.classList.remove('hidden');
-    document.getElementById('calendarGrid').parentElement.parentElement.style.display = 'none';
-    document.getElementById('scheduleList').parentElement.style.display = 'none';
+    
+    // Hide calendar and upcoming shifts
+    const calendarCard = document.getElementById('calendarGrid').closest('.card');
+    const scheduleCard = document.getElementById('scheduleList').closest('.card');
+    if (calendarCard) calendarCard.style.display = 'none';
+    if (scheduleCard) scheduleCard.style.display = 'none';
 }
 
 function hideDayDetail() {
     document.getElementById('dayDetail').classList.add('hidden');
-    document.getElementById('calendarGrid').parentElement.parentElement.style.display = 'block';
-    document.getElementById('scheduleList').parentElement.style.display = 'block';
+    
+    // Show calendar and upcoming shifts
+    const calendarCard = document.getElementById('calendarGrid').closest('.card');
+    const scheduleCard = document.getElementById('scheduleList').closest('.card');
+    if (calendarCard) calendarCard.style.display = 'block';
+    if (scheduleCard) scheduleCard.style.display = 'block';
 }
 
 function renderUpcomingShifts() {
