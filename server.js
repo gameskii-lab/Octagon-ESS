@@ -786,10 +786,15 @@ app.get('/api/debug/leave-applications', async (req, res) => {
 app.post('/api/workflow-action', async (req, res) => {
     const { doctype, docname, action, remark } = req.body;
     
-    console.log('📝 Workflow action:', { doctype, docname, action, remark });
+    console.log('📝 Workflow action received:');
+    console.log('  doctype:', doctype);
+    console.log('  docname:', docname);
+    console.log('  action:', action);
+    console.log('  remark:', remark);
     
     if (!doctype || !docname || !action) {
-        return res.status(400).json({ error: 'Missing required fields' });
+        console.log('❌ Missing fields');
+        return res.status(400).json({ error: 'Missing required fields: doctype, docname, action' });
     }
     
     if (!API_KEY || !API_SECRET) {
@@ -797,25 +802,24 @@ app.post('/api/workflow-action', async (req, res) => {
     }
     
     try {
-        // For leave applications, update the status directly
-        let status;
+        // Determine new status
+        let newStatus;
         if (action === 'Approve') {
-            status = 'Approved';
+            newStatus = 'Approved';
         } else if (action === 'Reject') {
-            status = 'Rejected';
+            newStatus = 'Rejected';
         } else {
-            status = action;
+            newStatus = action;
         }
         
-        const payload = {
-            status: status
-        };
-        
+        const payload = { status: newStatus };
         if (remark) {
             payload.remark = remark;
         }
         
-        console.log('📤 Updating document:', doctype, docname, payload);
+        console.log('📤 Sending to ERPNext:');
+        console.log('  URL:', `${ERP_URL}/api/resource/${doctype}/${docname}`);
+        console.log('  Payload:', JSON.stringify(payload));
         
         const response = await fetch(
             `${ERP_URL}/api/resource/${doctype}/${docname}`,
@@ -830,13 +834,18 @@ app.post('/api/workflow-action', async (req, res) => {
         );
         
         const result = await response.json();
+        console.log('📥 ERPNext response status:', response.status);
+        console.log('📥 ERPNext response body:', JSON.stringify(result));
         
         if (response.ok && result.data) {
             console.log('✅ Document updated successfully');
             res.json({ success: true, message: `${action}d successfully` });
         } else {
-            console.log('❌ Update failed:', result);
-            res.status(400).json({ error: result.message || 'Action failed' });
+            console.log('❌ ERPNext rejected:', result);
+            res.status(400).json({ 
+                error: result.message || result._server_messages || 'Action failed',
+                details: result
+            });
         }
     } catch (error) {
         console.error('Workflow action error:', error);
