@@ -573,7 +573,7 @@ function navigateTo(screen) {
     closeDrawer();
     
     // Hide all screens
-    const screens = ['loginScreen', 'dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen', 'approvalsScreen'];
+    const screens = ['loginScreen', 'dashboardScreen', 'leaveScreen', 'payslipsScreen', 'scheduleScreen', 'profileScreen', 'approvalsScreen', 'onboardingScreen'];
     screens.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -611,16 +611,12 @@ function navigateTo(screen) {
         if (typeof loadScheduleScreen === 'function') loadScheduleScreen();
     } else if (screen === 'profile') {
         if (typeof loadProfileScreen === 'function') loadProfileScreen();
-    } else if (screen === 'profile') {
-        if (typeof loadProfileScreen === 'function') loadProfileScreen();
     } else if (screen === 'approvals') {
         if (typeof loadApprovalsScreen === 'function') loadApprovalsScreen();
-    }
     } else if (screen === 'onboarding') {
-    if (typeof loadOnboardingScreen === 'function') loadOnboardingScreen();
+        if (typeof loadOnboardingScreen === 'function') loadOnboardingScreen();
     }
 }
-
 function updateDrawerInfo() {
     const employeeName = currentEmployee?.name || currentEmployee?.employee_name || 'Employee';
     const nameEl = document.getElementById('drawerEmployeeName');
@@ -628,6 +624,7 @@ function updateDrawerInfo() {
     if (nameEl) nameEl.textContent = employeeName;
     if (deptEl) deptEl.textContent = currentEmployee?.department || 'N/A';
 }
+
 // ============================================
 // LEAVE FUNCTIONS
 // ============================================
