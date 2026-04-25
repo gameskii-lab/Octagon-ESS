@@ -532,46 +532,87 @@ app.get('/api/approvals/:email', async (req, res) => {
 app.get('/api/print-format/:doctype/:docname', async (req, res) => {
     const { doctype, docname } = req.params;
     
+    console.log(`🖨️ Print format request: ${doctype} / ${docname}`);
+    
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured' });
     }
     
     try {
-        // Try the printview endpoint with letterhead
-        const response = await cachedGet(
-            `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${docname}&doctype=${doctype}&print_format=Standard&no_letterhead=1`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        // Try Method 1: Standard print format
+        const response = await fetch(
+            `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${docname}&doctype=${doctype}&print_format=Standard&no_letterhead=1&_lang=en`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const result = await response.json();
         
+        console.log('📥 Print method 1 response:', result.message ? 'HTML received' : 'No HTML');
+        
         if (result.message?.html) {
-            res.json({ success: true, html: result.message.html });
-        } else {
-            // Fallback: Return a simple document summary
-            const docResponse = await cachedGet(
-                `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["*"]`,
-                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-            );
-            const docData = await docResponse.json();
+            return res.json({ success: true, html: result.message.html });
+        }
+        
+        // Try Method 2: Different endpoint
+        const response2 = await fetch(
+            `${ERP_URL}/api/method/frappe.desk.form.load.getdoc?doctype=${doctype}&name=${docname}`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const result2 = await response2.json();
+        
+        if (result2.docs?.[0]) {
+            const doc = result2.docs[0];
+            let html = '<div style="padding: 16px; font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">';
+            html += `<h2 style="border-bottom: 2px solid #333; padding-bottom: 8px;">${doctype}</h2>`;
+            html += `<p><strong>Document:</strong> ${docname}</p>`;
             
-            if (docData.data) {
-                const doc = docData.data;
-                let html = '<div style="padding: 16px; font-family: sans-serif;">';
-                html += `<h3>${doctype}: ${docname}</h3>`;
-                html += '<table style="width:100%; border-collapse:collapse;">';
-                
-                for (const [key, value] of Object.entries(doc)) {
-                    if (key.startsWith('_') || value === null || value === '') continue;
-                    html += `<tr><td style="padding:8px; border-bottom:1px solid #eee; font-weight:bold;">${key}</td><td style="padding:8px; border-bottom:1px solid #eee;">${value}</td></tr>`;
+            // Show key fields in a nice format
+            const keyFields = ['employee', 'employee_name', 'leave_type', 'status', 'from_date', 'to_date', 'total_leave_days', 'description', 'posting_date'];
+            html += '<table style="width:100%; border-collapse: collapse; margin-top: 16px;">';
+            
+            for (const field of keyFields) {
+                if (doc[field] !== undefined && doc[field] !== null && doc[field] !== '') {
+                    const label = field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    html += `<tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; background: #f8f9fa; width: 40%;">${label}</td>
+                        <td style="padding: 10px; border-bottom: 1px solid #eee;">${doc[field]}</td>
+                    </tr>`;
                 }
-                
-                html += '</table></div>';
-                res.json({ success: true, html });
-            } else {
-                res.json({ success: true, html: '<p>Document not found</p>' });
             }
+            
+            html += '</table></div>';
+            return res.json({ success: true, html });
+        }
+        
+        // Fallback: Get the full document
+        const docResponse = await fetch(
+            `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["*"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const docData = await docResponse.json();
+        
+        if (docData.data) {
+            const doc = docData.data;
+            let html = '<div style="padding: 16px; font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">';
+            html += `<h2 style="border-bottom: 2px solid #333; padding-bottom: 8px;">${doctype}</h2>`;
+            html += `<p><strong>Document:</strong> ${docname}</p>`;
+            html += '<table style="width:100%; border-collapse: collapse; margin-top: 16px;">';
+            
+            for (const [key, value] of Object.entries(doc)) {
+                if (key.startsWith('_') || value === null || value === '' || key === 'name' || key === 'docstatus') continue;
+                const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                html += `<tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee; font-weight: bold; background: #f8f9fa; width: 40%;">${label}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${value}</td>
+                </tr>`;
+            }
+            
+            html += '</table></div>';
+            res.json({ success: true, html });
+        } else {
+            res.json({ success: true, html: '<p style="padding: 20px; text-align: center;">Document not found</p>' });
         }
     } catch (error) {
+        console.error('Print format error:', error);
         res.status(500).json({ error: error.message });
     }
 });
