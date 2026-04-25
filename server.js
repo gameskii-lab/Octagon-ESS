@@ -537,16 +537,40 @@ app.get('/api/print-format/:doctype/:docname', async (req, res) => {
     }
     
     try {
+        // Try the printview endpoint with letterhead
         const response = await cachedGet(
-            `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${docname}&doctype=${doctype}&print_format=Standard`,
+            `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${docname}&doctype=${doctype}&print_format=Standard&no_letterhead=1`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const result = await response.json();
         
-        res.json({ 
-            success: true, 
-            html: result.message?.html || 'No print format available'
-        });
+        if (result.message?.html) {
+            res.json({ success: true, html: result.message.html });
+        } else {
+            // Fallback: Return a simple document summary
+            const docResponse = await cachedGet(
+                `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["*"]`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const docData = await docResponse.json();
+            
+            if (docData.data) {
+                const doc = docData.data;
+                let html = '<div style="padding: 16px; font-family: sans-serif;">';
+                html += `<h3>${doctype}: ${docname}</h3>`;
+                html += '<table style="width:100%; border-collapse:collapse;">';
+                
+                for (const [key, value] of Object.entries(doc)) {
+                    if (key.startsWith('_') || value === null || value === '') continue;
+                    html += `<tr><td style="padding:8px; border-bottom:1px solid #eee; font-weight:bold;">${key}</td><td style="padding:8px; border-bottom:1px solid #eee;">${value}</td></tr>`;
+                }
+                
+                html += '</table></div>';
+                res.json({ success: true, html });
+            } else {
+                res.json({ success: true, html: '<p>Document not found</p>' });
+            }
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
