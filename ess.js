@@ -947,8 +947,148 @@ function showApprovalStatus(message, type) {
 }
 
 // ============================================
-// OTHER SCREEN FUNCTIONS (Placeholders)
+// ONBOARDING FUNCTIONS
 // ============================================
+
+let currentOnboarding = null;
+let currentActivity = null;
+
+async function loadOnboardingScreen() {
+    if (!config.employeeId) return;
+    
+    document.getElementById('onboardingActivities').innerHTML = '<p style="color: #666; text-align: center;">Loading...</p>';
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/onboarding/${config.employeeId}`);
+        const result = await response.json();
+        
+        if (result.success && result.onboarding) {
+            currentOnboarding = result.onboarding;
+            renderOnboarding(result.onboarding);
+        } else {
+            document.getElementById('onboardingWelcome').textContent = 'No Active Onboarding';
+            document.getElementById('onboardingSubtitle').textContent = 'You are not currently in an onboarding program';
+            document.getElementById('onboardingActivities').innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">Contact HR if you believe this is an error</p>';
+        }
+    } catch (error) {
+        console.error('Onboarding error:', error);
+        document.getElementById('onboardingActivities').innerHTML = '<p style="color: #666;">Error loading onboarding</p>';
+    }
+}
+
+function renderOnboarding(onboarding) {
+    // Update welcome
+    document.getElementById('onboardingWelcome').textContent = `Welcome, ${onboarding.employee_name || 'New Team Member'}!`;
+    document.getElementById('onboardingSubtitle').textContent = onboarding.onboarding_template || 'Let\'s get you set up';
+    
+    // Update progress
+    document.getElementById('onboardingProgress').textContent = `${onboarding.progress}%`;
+    document.getElementById('onboardingProgressBar').style.width = `${onboarding.progress}%`;
+    document.getElementById('onboardingFraction').textContent = `${onboarding.completedActivities} of ${onboarding.totalActivities} activities complete`;
+    
+    // Render activities
+    if (onboarding.activities && onboarding.activities.length > 0) {
+        let html = '';
+        onboarding.activities.forEach(activity => {
+            const isComplete = activity.completion_status === 'Completed';
+            const statusIcon = isComplete ? '✅' : '⬜';
+            const statusClass = isComplete ? 'status-approved' : 'status-pending';
+            
+            html += `
+                <div class="leave-request-item" onclick="viewOnboardingActivity('${escapeHtml(activity.activity_name)}', '${escapeHtml(activity.description || '')}', ${isComplete})" style="cursor: pointer;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-size: 20px; margin-right: 10px;">${statusIcon}</span>
+                            <strong>${activity.activity_name}</strong>
+                            ${activity.responsible ? `<div style="font-size: 12px; color: #666;">Responsible: ${activity.responsible}</div>` : ''}
+                        </div>
+                        <span class="leave-status ${statusClass}">${activity.completion_status}</span>
+                    </div>
+                </div>
+            `;
+        });
+        document.getElementById('onboardingActivities').innerHTML = html;
+    } else {
+        document.getElementById('onboardingActivities').innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">No activities defined in the onboarding template</p>';
+    }
+}
+
+function viewOnboardingActivity(name, description, isComplete) {
+    currentActivity = { name, description, isComplete };
+    
+    document.getElementById('onboardingDetail').classList.remove('hidden');
+    document.getElementById('onboardingDetailTitle').textContent = name;
+    document.getElementById('onboardingDetailContent').innerHTML = `
+        <p style="margin-bottom: 16px;">${description || 'No additional details provided'}</p>
+        <div style="font-size: 14px; color: #666;">
+            Status: <span class="leave-status ${isComplete ? 'status-approved' : 'status-pending'}">${isComplete ? 'Completed' : 'Pending'}</span>
+        </div>
+    `;
+    
+    const completeBtn = document.getElementById('onboardingCompleteBtn');
+    if (isComplete) {
+        completeBtn.style.display = 'none';
+    } else {
+        completeBtn.style.display = 'block';
+        completeBtn.onclick = () => completeOnboardingActivity(name);
+    }
+    
+    // Scroll to detail
+    document.getElementById('onboardingDetail').scrollIntoView({ behavior: 'smooth' });
+}
+
+function hideOnboardingDetail() {
+    document.getElementById('onboardingDetail').classList.add('hidden');
+    currentActivity = null;
+}
+
+async function completeOnboardingActivity(activityName) {
+    const btn = document.getElementById('onboardingCompleteBtn');
+    btn.disabled = true;
+    btn.textContent = 'Completing...';
+    
+    try {
+        const response = await fetch(`${config.middlewareUrl}/api/onboarding/complete-activity`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                employeeId: currentOnboarding.name,
+                activityName: activityName
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showOnboardingStatus('✅ Activity completed!', 'success');
+            hideOnboardingDetail();
+            // Reload onboarding data
+            setTimeout(() => loadOnboardingScreen(), 500);
+        } else {
+            throw new Error(result.error || 'Failed to complete activity');
+        }
+    } catch (error) {
+        showOnboardingStatus(`❌ ${error.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '✅ Mark as Complete';
+    }
+}
+
+function showOnboardingStatus(message, type) {
+    const statusDiv = document.getElementById('onboardingStatusMessage');
+    statusDiv.className = `status ${type}`;
+    statusDiv.textContent = message;
+    setTimeout(() => {
+        statusDiv.textContent = '';
+        statusDiv.className = '';
+    }, 5000);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
 
 // ============================================
 // PAYSLIP FUNCTIONS
