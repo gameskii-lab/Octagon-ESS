@@ -1298,8 +1298,15 @@ function renderUpcomingShifts() {
 }
 
 function loadProfileScreen() {
+    const profileInfoEl = document.getElementById('profileInfo');
+    
+    if (!profileInfoEl) {
+        console.log('Profile info element not found');
+        return;
+    }
+    
     const employeeName = currentEmployee?.name || currentEmployee?.employee_name || 'Employee';
-    document.getElementById('profileInfo').innerHTML = `
+    profileInfoEl.innerHTML = `
         <div style="text-align: center; margin-bottom: 20px;">
             <div style="font-size: 48px; margin-bottom: 10px;">👤</div>
             <h3>${employeeName}</h3>
