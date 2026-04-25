@@ -596,7 +596,8 @@ function navigateTo(screen) {
         'payslips': 'Payslips',
         'schedule': 'Schedule',
         'profile': 'Profile',
-        'approvals': 'Approvals' 
+        'approvals': 'Approvals',
+        'onboarding': 'Onboarding'
     };
     const titleEl = document.getElementById('screenTitle');
     if (titleEl) titleEl.textContent = titles[screen] || 'Octagon ESS';
@@ -614,6 +615,9 @@ function navigateTo(screen) {
         if (typeof loadProfileScreen === 'function') loadProfileScreen();
     } else if (screen === 'approvals') {
         if (typeof loadApprovalsScreen === 'function') loadApprovalsScreen();
+    }
+    } else if (screen === 'onboarding') {
+    if (typeof loadOnboardingScreen === 'function') loadOnboardingScreen();
     }
 }
 
