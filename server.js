@@ -782,6 +782,68 @@ app.get('/api/debug/leave-applications', async (req, res) => {
     }
 });
 
+// Apply workflow action (Approve/Reject)
+app.post('/api/workflow-action', async (req, res) => {
+    const { doctype, docname, action, remark } = req.body;
+    
+    console.log('📝 Workflow action:', { doctype, docname, action, remark });
+    
+    if (!doctype || !docname || !action) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // For leave applications, update the status directly
+        let status;
+        if (action === 'Approve') {
+            status = 'Approved';
+        } else if (action === 'Reject') {
+            status = 'Rejected';
+        } else {
+            status = action;
+        }
+        
+        const payload = {
+            status: status
+        };
+        
+        if (remark) {
+            payload.remark = remark;
+        }
+        
+        console.log('📤 Updating document:', doctype, docname, payload);
+        
+        const response = await fetch(
+            `${ERP_URL}/api/resource/${doctype}/${docname}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `token ${API_KEY}:${API_SECRET}`
+                },
+                body: JSON.stringify(payload)
+            }
+        );
+        
+        const result = await response.json();
+        
+        if (response.ok && result.data) {
+            console.log('✅ Document updated successfully');
+            res.json({ success: true, message: `${action}d successfully` });
+        } else {
+            console.log('❌ Update failed:', result);
+            res.status(400).json({ error: result.message || 'Action failed' });
+        }
+    } catch (error) {
+        console.error('Workflow action error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============================================
 // 404 HANDLER
 // ============================================
