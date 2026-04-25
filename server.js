@@ -786,15 +786,10 @@ app.get('/api/debug/leave-applications', async (req, res) => {
 app.post('/api/workflow-action', async (req, res) => {
     const { doctype, docname, action, remark } = req.body;
     
-    console.log('📝 Workflow action received:');
-    console.log('  doctype:', doctype);
-    console.log('  docname:', docname);
-    console.log('  action:', action);
-    console.log('  remark:', remark);
+    console.log('📝 Workflow action:', { doctype, docname, action, remark });
     
     if (!doctype || !docname || !action) {
-        console.log('❌ Missing fields');
-        return res.status(400).json({ error: 'Missing required fields: doctype, docname, action' });
+        return res.status(400).json({ error: 'Missing required fields' });
     }
     
     if (!API_KEY || !API_SECRET) {
@@ -802,6 +797,17 @@ app.post('/api/workflow-action', async (req, res) => {
     }
     
     try {
+        // First get the current document
+        const getResponse = await fetch(
+            `${ERP_URL}/api/resource/${doctype}/${docname}`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const docData = await getResponse.json();
+        
+        if (!docData.data) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+        
         // Determine new status
         let newStatus;
         if (action === 'Approve') {
@@ -812,14 +818,26 @@ app.post('/api/workflow-action', async (req, res) => {
             newStatus = action;
         }
         
-        const payload = { status: newStatus };
+        // Update the document with all original fields + new status
+        const payload = { ...docData.data, status: newStatus };
         if (remark) {
             payload.remark = remark;
         }
         
-        console.log('📤 Sending to ERPNext:');
-        console.log('  URL:', `${ERP_URL}/api/resource/${doctype}/${docname}`);
-        console.log('  Payload:', JSON.stringify(payload));
+        // Remove read-only fields that cause issues
+        delete payload.name;
+        delete payload.creation;
+        delete payload.modified;
+        delete payload.owner;
+        delete payload.modified_by;
+        delete payload.docstatus;
+        delete payload.idx;
+        delete payload._user_tags;
+        delete payload._comments;
+        delete payload._assign;
+        delete payload._liked_by;
+        
+        console.log('📤 Updating document with status:', newStatus);
         
         const response = await fetch(
             `${ERP_URL}/api/resource/${doctype}/${docname}`,
@@ -834,18 +852,20 @@ app.post('/api/workflow-action', async (req, res) => {
         );
         
         const result = await response.json();
-        console.log('📥 ERPNext response status:', response.status);
-        console.log('📥 ERPNext response body:', JSON.stringify(result));
+        console.log('📥 ERPNext response:', JSON.stringify(result));
         
         if (response.ok && result.data) {
-            console.log('✅ Document updated successfully');
-            res.json({ success: true, message: `${action}d successfully` });
+            // Verify the update
+            const verifyResponse = await fetch(
+                `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["status"]`,
+                { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+            );
+            const verifyData = await verifyResponse.json();
+            console.log('✅ Verified status:', verifyData.data?.status);
+            
+            res.json({ success: true, message: `${action}d successfully`, newStatus: verifyData.data?.status });
         } else {
-            console.log('❌ ERPNext rejected:', result);
-            res.status(400).json({ 
-                error: result.message || result._server_messages || 'Action failed',
-                details: result
-            });
+            res.status(400).json({ error: result.message || result._server_messages || 'Action failed' });
         }
     } catch (error) {
         console.error('Workflow action error:', error);
