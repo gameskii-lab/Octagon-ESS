@@ -915,6 +915,125 @@ app.post('/api/workflow-action', async (req, res) => {
 });
 
 // ============================================
+// ONBOARDING ENDPOINTS (Dynamic from ERPNext)
+// ============================================
+
+// Get onboarding status for an employee
+app.get('/api/onboarding/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Fetch Employee Onboarding record
+        const onboardingResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Employee%20Onboarding?filters=[["employee","=","${employeeId}"]]&fields=["*"]&limit=1`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const onboardingData = await onboardingResponse.json();
+        
+        if (!onboardingData.data || onboardingData.data.length === 0) {
+            // No onboarding record - employee might not be in onboarding phase
+            return res.json({ 
+                success: true, 
+                onboarding: null,
+                message: 'No active onboarding found'
+            });
+        }
+        
+        const onboarding = onboardingData.data[0];
+        
+        // Fetch the onboarding template to get activities
+        let activities = [];
+        if (onboarding.onboarding_template) {
+            const templateResponse = await cachedGet(
+                `${ERP_URL}/api/resource/Employee%20Onboarding%20Template/${onboarding.onboarding_template}`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const templateData = await templateResponse.json();
+            
+            if (templateData.data && templateData.data.activities) {
+                activities = templateData.data.activities.map(activity => ({
+                    activity_name: activity.activity_name,
+                    description: activity.description,
+                    responsible: activity.responsible,
+                    completion_status: onboarding[`custom_${activity.activity_name.toLowerCase().replace(/\s+/g, '_')}`] || 'Pending'
+                }));
+            }
+        }
+        
+        // Calculate progress
+        const totalActivities = activities.length;
+        const completedActivities = activities.filter(a => a.completion_status === 'Completed').length;
+        const progress = totalActivities > 0 ? Math.round((completedActivities / totalActivities) * 100) : 0;
+        
+        res.json({
+            success: true,
+            onboarding: {
+                name: onboarding.name,
+                employee: onboarding.employee,
+                employee_name: onboarding.employee_name,
+                onboarding_template: onboarding.onboarding_template,
+                status: onboarding.status,
+                joining_date: onboarding.joining_date,
+                activities: activities,
+                progress: progress,
+                totalActivities: totalActivities,
+                completedActivities: completedActivities
+            }
+        });
+    } catch (error) {
+        console.error('Onboarding error:', error);
+        res.status(500).json({ error: 'Server error fetching onboarding' });
+    }
+});
+
+// Mark an onboarding activity as complete
+app.post('/api/onboarding/complete-activity', async (req, res) => {
+    const { employeeId, activityName } = req.body;
+    
+    if (!employeeId || !activityName) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Update the employee onboarding record
+        const fieldName = `custom_${activityName.toLowerCase().replace(/\s+/g, '_')}`;
+        
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Employee%20Onboarding/${employeeId}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `token ${API_KEY}:${API_SECRET}`
+                },
+                body: JSON.stringify({
+                    [fieldName]: 'Completed',
+                    [`${fieldName}_date`]: new Date().toISOString().split('T')[0]
+                })
+            }
+        );
+        const result = await response.json();
+        
+        if (response.ok && result.data) {
+            res.json({ success: true, message: 'Activity marked as complete' });
+        } else {
+            res.status(400).json({ error: result.message || 'Update failed' });
+        }
+    } catch (error) {
+        console.error('Activity complete error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================
 // 404 HANDLER
 // ============================================
 
