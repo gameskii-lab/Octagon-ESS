@@ -4,9 +4,15 @@ const app = express();
 
 // CORS configuration - Allow your frontend
 app.use(cors({
-    origin: ['https://octagon-ess.onrender.com', 'http://localhost:3000', 'http://127.0.0.1:5500'],
+    origin: [
+        'https://octagon-ess.onrender.com',
+        'https://octagon-ess-frontend-production.up.railway.app',  // 👈 ADD THIS
+        'http://localhost:3000',
+        'http://127.0.0.1:5500'
+    ],
     credentials: true
 }));
+
 app.use(express.json());
 
 // Log all incoming requests
