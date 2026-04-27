@@ -1039,6 +1039,28 @@ app.post('/api/onboarding/complete-activity', async (req, res) => {
     }
 });
 
+// Get today's check-ins
+app.get('/api/today-checkins/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured on server' });
+    }
+    
+    try {
+        const response = await fetch(
+            `${ERP_URL}/api/resource/Employee%20Checkin?filters=[["employee","=","${employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const data = await response.json();
+        res.json({ success: true, checkins: data.data || [] });
+    } catch (error) {
+        console.error('Check-ins fetch error:', error);
+        res.status(500).json({ error: 'Server error fetching check-ins' });
+    }
+});
+
 // ============================================
 // 404 HANDLER
 // ============================================
