@@ -15,6 +15,79 @@ app.use(cors({
 
 app.use(express.json());
 
+// ============================================
+// STATIC FILE SERVING (for PWA)
+// ============================================
+const path = require('path');
+
+// Serve PWA manifest with correct MIME type
+app.get('/manifest.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/manifest+json');
+    res.sendFile(path.join(__dirname, 'manifest.json'));
+});
+
+// Serve service worker with correct MIME type
+app.get('/sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(__dirname, 'sw.js'));
+});
+
+// Serve app icons
+app.get('/icon-:size.png', (req, res) => {
+    const size = req.params.size;
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    res.sendFile(path.join(__dirname, `icon-${size}.png`));
+});
+
+// ============================================
+// SECURITY HEADERS (Helmet)
+// ============================================
+const helmet = require('helmet');
+
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            imgSrc: ["'self'", "data:", "https:"],
+            connectSrc: ["'self'", "https://erp.octagonerp.net", "https://octagon-ess-production.up.railway.app"],
+            fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+            manifestSrc: ["'self'"],
+            workerSrc: ["'self'"]
+        }
+    },
+    crossOriginEmbedderPolicy: false, // Required for some PWA features
+    crossOriginOpenerPolicy: false
+}));
+
+// Add PWA headers to all responses
+app.use((req, res, next) => {
+    // Prevent caching of HTML to ensure PWA updates
+    if (req.path.endsWith('.html') || req.path === '/') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    
+    // Allow PWA installation
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    
+    next();
+});
+
+// Serve main frontend files (if hosting frontend from same server)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Catch-all for SPA routing (optional - if using React/Vue router)
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    if (req.path === '/manifest.json' || req.path === '/sw.js') return next();
+    if (req.path.match(/\.(png|jpg|jpeg|gif|css|js|ico)$/)) return next();
+    
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Log all incoming requests
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
