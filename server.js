@@ -467,17 +467,45 @@ app.get('/api/leave-requests/:employeeId', async (req, res) => {
 
 app.post('/api/leave-application', async (req, res) => {
     const { employeeId, leaveType, fromDate, toDate, halfDay, halfDayDate, reason } = req.body;
-    
     console.log('📝 Leave application received:', { employeeId, leaveType, fromDate, toDate });
-    
+
     if (!employeeId || !leaveType || !fromDate || !toDate) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
-    
+
     try {
+        // 🔥 STEP 1: Fetch employee record to get default leave approver
+        let leaveApprover = null;
+        try {
+            const empResponse = await fetch(
+                `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["leave_approver","department"]`,
+                { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+            );
+            const empData = await empResponse.json();
+            
+            if (empData.data?.leave_approver) {
+                leaveApprover = empData.data.leave_approver;
+                console.log(`👤 Using employee's leave approver: ${leaveApprover}`);
+            } else if (empData.data?.department) {
+                // 🔥 STEP 2: If no employee approver, check department
+                const deptResponse = await fetch(
+                    `${ERP_URL}/api/resource/Department/${empData.data.department}?fields=["leave_approver"]`,
+                    { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+                );
+                const deptData = await deptResponse.json();
+                if (deptData.data?.leave_approver) {
+                    leaveApprover = deptData.data.leave_approver;
+                    console.log(`🏢 Using department's leave approver: ${leaveApprover}`);
+                }
+            }
+        } catch (err) {
+            console.log('⚠️ Could not fetch leave approver, proceeding without:', err.message);
+        }
+
+        // 🔥 STEP 3: Build payload with approver if found
         const payload = {
             employee: employeeId,
             leave_type: leaveType,
@@ -486,6 +514,11 @@ app.post('/api/leave-application', async (req, res) => {
             description: reason || 'Applied via ESS',
             status: 'Open'
         };
+        
+        // Only add leave_approver if we found one
+        if (leaveApprover) {
+            payload.leave_approver = leaveApprover;
+        }
         
         if (halfDay) {
             payload.half_day = 1;
@@ -519,9 +552,6 @@ app.post('/api/leave-application', async (req, res) => {
 
 // ============================================
 // APPROVAL ENDPOINTS
-// ============================================
-// ============================================
-// HELPER: Check if Workflow is Active for Doctype
 // ============================================
 async function isWorkflowActive(doctype) {
     try {
