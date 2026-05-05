@@ -391,23 +391,36 @@ app.post('/api/checkin', async (req, res) => {
 
 app.get('/api/leave-balance/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
-    console.log(`🔍 Fetching leave balance for employee: ${employeeId}`);
+    console.log(`🔍 Fetching leave balance for: ${employeeId}`);
 
     if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
 
     try {
+        // 🔥 USE DIRECT FETCH (no cache) for real-time leave data
         const response = await fetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const data = await response.json();
-        console.log(`📊 Leave Allocation response:`, data.data?.length || 0, 'records found');
+        
+        // 🔍 DEBUG: Logs exact fields ERPNext returns
+        if (data.data?.length > 0) {
+            console.log('📦 Raw ERPNext Allocation Fields:', Object.keys(data.data[0]).join(', '));
+        }
 
-        const balances = (data.data || []).map(alloc => ({
-            leave_type: alloc.leave_type,
-            leaves_allocated: alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0,
-            leaves_taken: alloc.leaves_taken || 0
-        }));
+        const balances = (data.data || []).map(alloc => {
+            const allocated = alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0;
+            // ERPNext sometimes uses different field names across versions
+            const taken = alloc.leaves_taken || alloc.taken_leaves || alloc.used_leaves || 0;
+            
+            console.log(`📊 ${alloc.leave_type} → Allocated: ${allocated}, Taken: ${taken}`);
+            
+            return {
+                leave_type: alloc.leave_type,
+                leaves_allocated: allocated,
+                leaves_taken: taken
+            };
+        });
 
         res.json({ success: true, balances });
     } catch (error) {
@@ -415,7 +428,6 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
         res.status(500).json({ error: 'Server error fetching leave balance' });
     }
 });
-
 app.get('/api/leave-requests/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     
