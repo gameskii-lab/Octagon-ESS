@@ -396,29 +396,30 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
 
     try {
-        // 🔥 USE DIRECT FETCH (no cache) for real-time leave data
+        // Direct fetch (no cache) for real-time leave data
         const response = await fetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const data = await response.json();
         
-        // 🔍 DEBUG: Logs exact fields ERPNext returns
+        // Debug log raw fields (keep this for troubleshooting)
         if (data.data?.length > 0) {
             console.log('📦 Raw ERPNext Allocation Fields:', Object.keys(data.data[0]).join(', '));
         }
 
         const balances = (data.data || []).map(alloc => {
             const allocated = alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0;
-            // ERPNext sometimes uses different field names across versions
-            const taken = alloc.leaves_taken || alloc.taken_leaves || alloc.used_leaves || 0;
+            const unused = alloc.unused_leaves || 0;
+            // ✅ Calculate taken from allocated - unused
+            const taken = Math.max(0, allocated - unused);
             
-            console.log(`📊 ${alloc.leave_type} → Allocated: ${allocated}, Taken: ${taken}`);
+            console.log(`📊 ${alloc.leave_type} → Allocated: ${allocated}, Unused: ${unused}, Taken: ${taken}`);
             
             return {
                 leave_type: alloc.leave_type,
                 leaves_allocated: allocated,
-                leaves_taken: taken
+                leaves_taken: taken  // ✅ Now correctly calculated
             };
         });
 
