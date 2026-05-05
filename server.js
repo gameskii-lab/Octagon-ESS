@@ -393,33 +393,48 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     console.log(`🔍 Fetching leave balance for: ${employeeId}`);
 
-    if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
 
     try {
-        // Direct fetch (no cache) for real-time leave data
-        const response = await fetch(
+        // Step 1: Get Leave Allocations (for allocated amounts)
+        const allocResponse = await fetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
-        const data = await response.json();
+        const allocData = await allocResponse.json();
         
-        // Debug log raw fields (keep this for troubleshooting)
-        if (data.data?.length > 0) {
-            console.log('📦 Raw ERPNext Allocation Fields:', Object.keys(data.data[0]).join(', '));
-        }
-
-        const balances = (data.data || []).map(alloc => {
+        // Step 2: Get Approved Leave Applications (to calculate taken)
+        const appResponse = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"],["status","=","Approved"],["docstatus","=",1]]&fields=["leave_type","total_leave_days"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const appData = await appResponse.json();
+        
+        // Calculate taken days per leave type from Approved applications
+        const takenByType = {};
+        (appData.data || []).forEach(app => {
+            const type = app.leave_type;
+            const days = app.total_leave_days || 0;
+            takenByType[type] = (takenByType[type] || 0) + days;
+        });
+        
+        console.log('📊 Taken by type:', takenByType);
+        
+        // Build balances with accurate taken calculation
+        const balances = (allocData.data || []).map(alloc => {
             const allocated = alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0;
-            const unused = alloc.unused_leaves || 0;
-            // ✅ Calculate taken from allocated - unused
-            const taken = Math.max(0, allocated - unused);
+            const taken = takenByType[alloc.leave_type] || 0;
+            const available = Math.max(0, allocated - taken);
             
-            console.log(`📊 ${alloc.leave_type} → Allocated: ${allocated}, Unused: ${unused}, Taken: ${taken}`);
+            console.log(`📋 ${alloc.leave_type}: Allocated=${allocated}, Taken=${taken}, Available=${available}`);
             
             return {
                 leave_type: alloc.leave_type,
                 leaves_allocated: allocated,
-                leaves_taken: taken  // ✅ Now correctly calculated
+                leaves_taken: taken,
+                leaves_available: available  // Optional: send available directly
             };
         });
 
@@ -429,6 +444,7 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
         res.status(500).json({ error: 'Server error fetching leave balance' });
     }
 });
+
 app.get('/api/leave-requests/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     
