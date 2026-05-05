@@ -406,7 +406,7 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
         const balances = (data.data || []).map(alloc => ({
             leave_type: alloc.leave_type,
             leaves_allocated: alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0,
-            leaves_taken: alloc.leaves_taken || 0 // ✅ FIXED: Actually maps the taken field
+            leaves_taken: alloc.leaves_taken || 0
         }));
 
         res.json({ success: true, balances });
