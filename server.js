@@ -520,90 +520,95 @@ app.post('/api/leave-application', async (req, res) => {
 // ============================================
 // APPROVAL ENDPOINTS
 // ============================================
+// ============================================
+// HELPER: Check if Workflow is Active for Doctype
+// ============================================
+async function isWorkflowActive(doctype) {
+    try {
+        const res = await fetch(
+            `${ERP_URL}/api/resource/Workflow?filters=[["document_type","=","${doctype}"],["is_active","=","1"]]&fields=["name"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const data = await res.json();
+        return data.data && data.data.length > 0;
+    } catch (error) {
+        return false;
+    }
+}
 
+// ============================================
+// APPROVAL ENDPOINTS (Handles Workflow & Non-Workflow)
+// ============================================
+
+// 1. Fetch Pending Approvals
 app.get('/api/approvals/:email', async (req, res) => {
     const email = decodeURIComponent(req.params.email);
-    
-    if (!API_KEY || !API_SECRET) {
-        return res.status(500).json({ error: 'API keys not configured' });
-    }
-    
+    if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
+
     try {
         const approvals = [];
         
-        // Get employee record for this user
-        const empResponse = await cachedGet(
+        // Get employee record to find employee_name
+        const empResponse = await fetch(
             `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name"]&limit=1`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const empData = await empResponse.json();
+        if (!empData.data || empData.data.length === 0) return res.json({ success: true, approvals: [] });
         
-        if (!empData.data || empData.data.length === 0) {
-            return res.json({ success: true, approvals: [] });
-        }
-        
-        const employee = empData.data[0];
-        const employeeName = employee.employee_name;
-        
-        // METHOD 1: Leave Applications pending approval (no workflow needed)
-        const leaveAppResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Leave%20Application?filters=[["status","=","Open"]]&fields=["name","employee","employee_name","leave_type","from_date","to_date","total_leave_days","creation","leave_approver"]&limit=20`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        const employeeName = empData.data[0].employee_name;
+
+        // METHOD 1: Standard Leave Applications (No Workflow)
+        // Fetches where leave_approver matches the user
+        const leaveAppResponse = await fetch(
+            `${ERP_URL}/api/resource/Leave%20Application?filters=[["status","in",["Open","Pending"]]]&fields=["name","employee","employee_name","leave_type","from_date","to_date","total_leave_days","leave_approver"]&limit=20`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const leaveAppData = await leaveAppResponse.json();
         
-        // Get user roles
-        const userResponse = await cachedGet(
-            `${ERP_URL}/api/resource/User/${email}`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-        );
-        const userData = await userResponse.json();
-        const userRoles = (userData.data?.roles || []).map(r => r.role);
-        
         for (const app of (leaveAppData.data || [])) {
-            const approverEmpResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Employee/${app.employee}`,
-                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-            );
-            const approverData = await approverEmpResponse.json();
-            
-            const leaveApprover = approverData.data?.leave_approver;
-            const isApprover = (leaveApprover === employeeName || leaveApprover === email);
-            const isHRManager = userRoles.includes('HR Manager') || userRoles.includes('HR User');
-            
-            if (isApprover || isHRManager) {
+            // Check if this user is the approver
+            if (app.leave_approver === employeeName || app.leave_approver === email) {
                 approvals.push({
                     doctype: 'Leave Application',
                     docname: app.name,
                     title: `${app.employee_name} - ${app.leave_type}`,
                     subtitle: `${app.from_date} to ${app.to_date} (${app.total_leave_days} days)`,
-                    state: 'Open',
+                    state: app.status, // "Open" or "Pending"
                     next_action: 'Approve',
-                    employee: app.employee_name,
-                    detail: `${app.leave_type}: ${app.from_date} to ${app.to_date}`
+                    employee: app.employee_name
                 });
             }
         }
-        
-        // METHOD 2: Workflow-based approvals (if workflows exist)
+
+        // METHOD 2: Workflow-based Approvals
+        // Fetches Workflow Actions pending for this user's roles
         try {
-            const wfResponse = await cachedGet(
+            const wfResponse = await fetch(
                 `${ERP_URL}/api/resource/Workflow%20Action?fields=["*"]&limit=50`,
-                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+                { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
             );
             const wfData = await wfResponse.json();
             
+            // Get User Roles
+            const userResponse = await fetch(`${ERP_URL}/api/resource/User/${email}`, { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } });
+            const userData = await userResponse.json();
+            const userRoles = (userData.data?.roles || []).map(r => r.role);
+
             for (const action of (wfData.data || [])) {
+                // Check if user has the role required for this action
                 if (!userRoles.includes(action.permitted_role)) continue;
                 
+                // Check if document is in the state requiring this action
                 try {
-                    const docResponse = await cachedGet(
-                        `${ERP_URL}/api/resource/${action.reference_doctype}?filters=[["workflow_state","=","${action.status}"]]&fields=["name","title","workflow_state","owner","modified"]&limit=20`,
-                        { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+                    const docResponse = await fetch(
+                        `${ERP_URL}/api/resource/${action.reference_doctype}?filters=[["workflow_state","=","${action.status}"]]&fields=["name","title","workflow_state"]&limit=10`,
+                        { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
                     );
                     const docData = await docResponse.json();
                     
                     for (const doc of (docData.data || [])) {
+                        // Avoid duplicates from Method 1
                         const alreadyAdded = approvals.some(a => a.docname === doc.name && a.doctype === action.reference_doctype);
                         if (!alreadyAdded) {
                             approvals.push({
@@ -617,17 +622,111 @@ app.get('/api/approvals/:email', async (req, res) => {
                             });
                         }
                     }
-                } catch (e) {
-                    continue;
-                }
+                } catch (e) { continue; }
             }
         } catch (e) {
-            console.log('No workflows configured - using default approval only');
+            console.log('Workflow check skipped or failed');
         }
-        
+
         res.json({ success: true, approvals });
     } catch (error) {
         console.error('Approvals error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. Submit Approval/Rejection Action
+app.post('/api/workflow-action', async (req, res) => {
+    const { doctype, docname, action, remark } = req.body;
+    console.log(`📝 Workflow action request: ${doctype} / ${docname} / ${action}`);
+
+    if (!doctype || !docname || !action) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+
+    try {
+        // 1. Get current document data
+        const getResponse = await fetch(
+            `${ERP_URL}/api/resource/${doctype}/${docname}`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const docData = await getResponse.json();
+        if (!docData.data) return res.status(404).json({ error: 'Document not found' });
+
+        // 2. Check if Workflow is Active for this Doctype
+        const workflowActive = await isWorkflowActive(doctype);
+        
+        let targetStatus;
+        let targetDocStatus = 1; // Default to Submitted
+        let payload = { ...docData.data };
+
+        if (workflowActive) {
+            // SCENARIO A: Workflow is Active
+            console.log('🔄 Workflow detected. Updating workflow_state.');
+            
+            // Map action to workflow state (You might need to adjust "Approved" based on your actual workflow state names)
+            targetStatus = action === 'Approve' ? 'Approved' : 'Rejected';
+            
+            payload.status = targetStatus;
+            payload.workflow_state = targetStatus; 
+            // Note: We don't force docstatus here; workflow rules usually handle submission.
+            // If your workflow requires manual submission after approval, set payload.docstatus = 1;
+        } else {
+            // SCENARIO B: No Workflow (Standard Approval)
+            console.log('📄 No Workflow detected. Updating status and submitting document.');
+            
+            targetStatus = action === 'Approve' ? 'Approved' : 'Rejected';
+            
+            payload.status = targetStatus;
+            payload.docstatus = 1; // 🔥 CRITICAL: 1 means "Submitted" in ERPNext. 0 is Draft.
+            
+            if (remark) payload.remarks = remark;
+        }
+
+        // 3. Clean payload (Remove read-only fields that break PUT requests)
+        delete payload.name;
+        delete payload.creation;
+        delete payload.modified;
+        delete payload.owner;
+        delete payload.modified_by;
+        delete payload.idx;
+        delete payload._user_tags;
+        delete payload._comments;
+        delete payload._assign;
+        delete payload._liked_by;
+        delete payload.amended_from;
+
+        // 4. Send Update Request
+        const response = await fetch(
+            `${ERP_URL}/api/resource/${doctype}/${docname}`,
+            {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `token ${API_KEY}:${API_SECRET}`
+                },
+                body: JSON.stringify(payload)
+            }
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.data) {
+            res.json({ 
+                success: true, 
+                message: `Action ${action} successful`, 
+                newStatus: targetStatus 
+            });
+        } else {
+            console.error(`❌ ERPNext Update Failed:`, result);
+            res.status(400).json({ error: result.message || 'Update failed' });
+        }
+    } catch (error) {
+        console.error('Workflow action error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -930,60 +1029,70 @@ app.get('/api/debug/leave-applications', async (req, res) => {
 // Apply workflow action (Approve/Reject)
 app.post('/api/workflow-action', async (req, res) => {
     const { doctype, docname, action, remark } = req.body;
-    
-    console.log('📝 Workflow action:', { doctype, docname, action, remark });
-    
+    console.log(`📝 Workflow action request: ${doctype} / ${docname} / ${action}`);
+
     if (!doctype || !docname || !action) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
-    
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured' });
     }
-    
+
     try {
-        // First get the current document
+        // 1. Get current document data
         const getResponse = await fetch(
             `${ERP_URL}/api/resource/${doctype}/${docname}`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const docData = await getResponse.json();
-        
+
         if (!docData.data) {
             return res.status(404).json({ error: 'Document not found' });
         }
-        
-        // Determine new status
-        let newStatus;
+
+        // 2. Determine target state
+        let targetStatus;
+        let targetDocStatus;
+
         if (action === 'Approve') {
-            newStatus = 'Approved';
+            targetStatus = 'Approved';
+            targetDocStatus = 1; // 1 = Submitted in ERPNext
         } else if (action === 'Reject') {
-            newStatus = 'Rejected';
+            targetStatus = 'Rejected';
+            targetDocStatus = 2; // 2 = Cancelled in ERPNext
         } else {
-            newStatus = action;
+            targetStatus = action;
+            targetDocStatus = docData.data.docstatus; 
         }
-        
-        // Update the document with all original fields + new status
-        const payload = { ...docData.data, status: newStatus };
-        if (remark) {
-            payload.remark = remark;
-        }
-        
-        // Remove read-only fields that cause issues
+
+        // 3. Prepare payload
+        const payload = { ...docData.data };
+        payload.status = targetStatus;
+        payload.docstatus = targetDocStatus; // 🔥 CRITICAL: Update docstatus to submit the document
+
+        // 4. Remove read-only / protected fields that break PUT requests
         delete payload.name;
         delete payload.creation;
         delete payload.modified;
         delete payload.owner;
         delete payload.modified_by;
-        delete payload.docstatus;
         delete payload.idx;
         delete payload._user_tags;
         delete payload._comments;
         delete payload._assign;
         delete payload._liked_by;
-        
-        console.log('📤 Updating document with status:', newStatus);
-        
+        delete payload.amended_from;
+
+        // Add remark if provided
+        if (remark) {
+            payload.remarks = remark; // ERPNext standard field
+            payload.remark = remark; 
+        }
+
+        console.log(`📤 Submitting update for ${doctype}: Status=${targetStatus}, DocStatus=${targetDocStatus}`);
+
+        // 5. Send Update Request
         const response = await fetch(
             `${ERP_URL}/api/resource/${doctype}/${docname}`,
             {
@@ -995,22 +1104,27 @@ app.post('/api/workflow-action', async (req, res) => {
                 body: JSON.stringify(payload)
             }
         );
-        
+
         const result = await response.json();
-        console.log('📥 ERPNext response:', JSON.stringify(result));
-        
+
         if (response.ok && result.data) {
-            // Verify the update
+            // Verify update
             const verifyResponse = await fetch(
-                `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["status"]`,
+                `${ERP_URL}/api/resource/${doctype}/${docname}?fields=["status", "docstatus"]`,
                 { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
             );
             const verifyData = await verifyResponse.json();
-            console.log('✅ Verified status:', verifyData.data?.status);
-            
-            res.json({ success: true, message: `${action}d successfully`, newStatus: verifyData.data?.status });
+
+            console.log(`✅ Verification: Status=${verifyData.data?.status}, DocStatus=${verifyData.data?.docstatus}`);
+
+            res.json({ 
+                success: true, 
+                message: `Action ${action} successful`, 
+                newStatus: verifyData.data?.status 
+            });
         } else {
-            res.status(400).json({ error: result.message || result._server_messages || 'Action failed' });
+            console.error(`❌ ERPNext Update Failed:`, result);
+            res.status(400).json({ error: result.message || 'Update failed' });
         }
     } catch (error) {
         console.error('Workflow action error:', error);
