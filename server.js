@@ -391,28 +391,24 @@ app.post('/api/checkin', async (req, res) => {
 
 app.get('/api/leave-balance/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
-    
     console.log(`🔍 Fetching leave balance for employee: ${employeeId}`);
-    
-    if (!API_KEY || !API_SECRET) {
-        return res.status(500).json({ error: 'API keys not configured on server' });
-    }
-    
+
+    if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
+
     try {
-        const response = await cachedGet(
+        const response = await fetch(
             `${ERP_URL}/api/resource/Leave%20Allocation?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
-        
         const data = await response.json();
         console.log(`📊 Leave Allocation response:`, data.data?.length || 0, 'records found');
-        
+
         const balances = (data.data || []).map(alloc => ({
             leave_type: alloc.leave_type,
             leaves_allocated: alloc.new_leaves_allocated || alloc.total_leaves_allocated || 0,
-            leaves_taken: 0
+            leaves_taken: alloc.leaves_taken || 0 // ✅ FIXED: Actually maps the taken field
         }));
-        
+
         res.json({ success: true, balances });
     } catch (error) {
         console.error('Leave balance error:', error.message);
