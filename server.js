@@ -216,7 +216,7 @@ app.get('/api/employee/:email', async (req, res) => {
     
     try {
         const response = await cachedGet(
-            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type"]&limit=1`,
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base"]&limit=1`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         
@@ -304,11 +304,14 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
         
         res.json({
             success: true,
-            assignment: {
-                shift_type: assignment.shift_type,
-                start_date: assignment.start_date,
-                end_date: assignment.end_date,
-                location: location
+            employee: {
+                id: emp.name,
+                name: employeeName,
+                employee_name: employeeName,
+                department: emp.department || 'N/A',
+                designation: emp.designation || 'N/A',
+                employment_type: emp.employment_type || 'Daily Wage',
+                custom_employee_base: emp.custom_employee_base || ''
             }
         });
     } catch (error) {
