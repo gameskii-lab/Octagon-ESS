@@ -224,18 +224,7 @@ app.get('/api/employee/:email', async (req, res) => {
         
         if (data.data && data.data.length > 0) {
             const emp = data.data[0];
-            const employeeName = emp.employee_name || emp.name || 'Employee';
-            
-            res.json({
-                success: true,
-                employee: {
-                    id: emp.name,
-                    name: employeeName,
-                    employee_name: employeeName,
-                    department: emp.department || 'N/A',
-                    designation: emp.designation || 'N/A',
-                    employment_type: emp.employment_type || 'Daily Wage'
-                }
+            }
             });
         } else {
             res.status(404).json({ error: 'No employee record found for this user' });
