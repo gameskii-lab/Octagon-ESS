@@ -241,6 +241,10 @@ app.get('/api/employee/:email', async (req, res) => {
         } else {
             res.status(404).json({ error: 'No employee record found for this user' });
         }
+    } catch (error) {
+        console.error('Employee fetch error:', error);
+        res.status(500).json({ error: 'Server error fetching employee' });
+    }
 });
 
 // ============================================
