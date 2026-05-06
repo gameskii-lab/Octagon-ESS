@@ -302,19 +302,6 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
                 console.log(`  Location: ${location.name} (${location.latitude}, ${location.longitude})`);
             }
         }
-        
-        res.json({
-            success: true,
-            employee: {
-                id: emp.name,
-                name: employeeName,
-                employee_name: employeeName,
-                department: emp.department || 'N/A',
-                designation: emp.designation || 'N/A',
-                employment_type: emp.employment_type || 'Daily Wage',
-                custom_employee_base: emp.custom_employee_base || ''
-            }
-        });
     } catch (error) {
         console.error('Shift assignment error:', error);
         res.status(500).json({ error: 'Server error fetching shift assignment' });
