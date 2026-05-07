@@ -877,9 +877,54 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
         );
         const leaveData = await leaveResponse.json();
         
-        // Fetch holidays
-        const holidayResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Holiday?filters=[["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`,
+        // Fetch holidays from the employee's assigned holiday list (v16 behavior)
+        let holidayListName = null;
+        
+        // Get employee's holiday list
+        try {
+            const empHolidayRes = await cachedGet(
+                `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["default_holiday_list"]`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const empHolidayData = await empHolidayRes.json();
+            holidayListName = empHolidayData.data?.default_holiday_list;
+            console.log(`📅 Employee holiday list: ${holidayListName || 'None found'}`);
+        } catch(e) {
+            console.log('Could not fetch employee holiday list:', e.message);
+        }
+        
+        // Fallback: Check company's default holiday list
+        if (!holidayListName) {
+            try {
+                const empRes = await cachedGet(
+                    `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["company"]`,
+                    { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+                );
+                const empData = await empRes.json();
+                const company = empData.data?.company;
+                
+                if (company) {
+                    const companyRes = await cachedGet(
+                        `${ERP_URL}/api/resource/Company/${company}?fields=["default_holiday_list"]`,
+                        { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+                    );
+                    const companyData = await companyRes.json();
+                    holidayListName = companyData.data?.default_holiday_list;
+                    console.log(`🏢 Company holiday list: ${holidayListName || 'None found'}`);
+                }
+            } catch(e) {
+                console.log('Could not fetch company holiday list:', e.message);
+            }
+        }
+        
+        // Fetch holidays from the identified holiday list
+        let holidayUrl = `${ERP_URL}/api/resource/Holiday?filters=[["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`;
+        
+        if (holidayListName) {
+            holidayUrl = `${ERP_URL}/api/resource/Holiday?filters=[["parent","=","${holidayListName}"],["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`;
+        }
+        
+        const holidayResponse = await cachedGet(holidayUrl,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const holidayData = await holidayResponse.json();
