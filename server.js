@@ -864,54 +864,43 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
     }
     
     try {
-        // Use ERPNext's built-in Roster API instead of manual fetching
-        const rosterResponse = await cachedGet(
-            `${ERP_URL}/api/method/erpnext.hr.doctype.shift_assignment.shift_assignment.get_shifts?employee=${employeeId}&start_date=${today}&end_date=${endDate}`,
+        // Fetch shift assignments
+        const shiftResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${endDate}"],["end_date",">=","${today}"]]&fields=["shift_type","start_date","end_date","shift_location"]&limit=30`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
-        const rosterData = await rosterResponse.json();
+        const shiftData = await shiftResponse.json();
         
-        // Also fetch approved leave applications
+        // Fetch approved leave applications
         const leaveResponse = await cachedGet(
             `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"],["status","=","Approved"],["from_date","<=","${endDate}"],["to_date",">=","${today}"]]&fields=["leave_type","from_date","to_date"]&limit=10`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const leaveData = await leaveResponse.json();
         
+        // Fetch holidays - simple approach
+        let holidays = [];
+        try {
+            const holidayResponse = await cachedGet(
+                `${ERP_URL}/api/resource/Holiday?filters=[["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const holidayData = await holidayResponse.json();
+            holidays = holidayData.data || [];
+        } catch(e) {
+            console.log('Holiday fetch failed:', e.message);
+        }
+        
         res.json({
             success: true,
-            shifts: rosterData.message?.shifts || [],
+            shifts: shiftData.data || [],
             leaves: leaveData.data || [],
-            holidays: rosterData.message?.holidays || [],
+            holidays: holidays,
             period: { from: today, to: endDate }
         });
     } catch (error) {
-        // Fallback to manual fetching if roster API fails
-        console.log('Roster API failed, using manual fetch:', error.message);
-        try {
-            const shiftResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${endDate}"],["end_date",">=","${today}"]]&fields=["shift_type","start_date","end_date","shift_location"]&limit=30`,
-                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-            );
-            const shiftData = await shiftResponse.json();
-            
-            const leaveResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"],["status","=","Approved"],["from_date","<=","${endDate}"],["to_date",">=","${today}"]]&fields=["leave_type","from_date","to_date"]&limit=10`,
-                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-            );
-            const leaveData = await leaveResponse.json();
-            
-            res.json({
-                success: true,
-                shifts: shiftData.data || [],
-                leaves: leaveData.data || [],
-                holidays: [],
-                period: { from: today, to: endDate }
-            });
-        } catch (fallbackError) {
-            console.error('Schedule error:', fallbackError);
-            res.status(500).json({ error: 'Server error fetching schedule' });
-        }
+        console.error('Schedule error:', error);
+        res.status(500).json({ error: 'Server error fetching schedule' });
     }
 });
 
