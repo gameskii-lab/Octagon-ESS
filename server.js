@@ -864,88 +864,58 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
     }
     
     try {
-        // Fetch shift assignments
-        const shiftResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${endDate}"],["end_date",">=","${today}"]]&fields=["shift_type","start_date","end_date","shift_location"]&limit=30`,
+        // Use ERPNext's built-in Roster API instead of manual fetching
+        const rosterResponse = await cachedGet(
+            `${ERP_URL}/api/method/erpnext.hr.doctype.shift_assignment.shift_assignment.get_shifts?employee=${employeeId}&start_date=${today}&end_date=${endDate}`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
-        const shiftData = await shiftResponse.json();
+        const rosterData = await rosterResponse.json();
         
-        // Fetch approved leave applications
+        // Also fetch approved leave applications
         const leaveResponse = await cachedGet(
             `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"],["status","=","Approved"],["from_date","<=","${endDate}"],["to_date",">=","${today}"]]&fields=["leave_type","from_date","to_date"]&limit=10`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const leaveData = await leaveResponse.json();
         
-        // Fetch holidays from the employee's Holiday List Assignment (v16 behavior)
-        let holidayListName = null;
-        
-        // Get employee's holiday list via Holiday List Assignment
+        res.json({
+            success: true,
+            shifts: rosterData.message?.shifts || [],
+            leaves: leaveData.data || [],
+            holidays: rosterData.message?.holidays || [],
+            period: { from: today, to: endDate }
+        });
+    } catch (error) {
+        // Fallback to manual fetching if roster API fails
+        console.log('Roster API failed, using manual fetch:', error.message);
         try {
-            const hlaResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["assigned_to","=","${employeeId}"],["applicable_for","=","Employee"],["docstatus","=",1]]&fields=["holiday_list"]&limit=1`,
+            const shiftResponse = await cachedGet(
+                `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${endDate}"],["end_date",">=","${today}"]]&fields=["shift_type","start_date","end_date","shift_location"]&limit=30`,
                 { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
             );
-            const hlaData = await hlaResponse.json();
+            const shiftData = await shiftResponse.json();
             
-            if (hlaData.data && hlaData.data.length > 0) {
-                holidayListName = hlaData.data[0].holiday_list;
-                console.log(`📅 Employee holiday list from assignment: ${holidayListName}`);
-            }
-        } catch(e) {
-            console.log('Could not fetch holiday list assignment:', e.message);
+            const leaveResponse = await cachedGet(
+                `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"],["status","=","Approved"],["from_date","<=","${endDate}"],["to_date",">=","${today}"]]&fields=["leave_type","from_date","to_date"]&limit=10`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const leaveData = await leaveResponse.json();
+            
+            res.json({
+                success: true,
+                shifts: shiftData.data || [],
+                leaves: leaveData.data || [],
+                holidays: [],
+                period: { from: today, to: endDate }
+            });
+        } catch (fallbackError) {
+            console.error('Schedule error:', fallbackError);
+            res.status(500).json({ error: 'Server error fetching schedule' });
         }
-        
-        // Fallback: Check employee's company default holiday list
-        if (!holidayListName) {
-            try {
-                const empRes = await cachedGet(
-                    `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["company"]`,
-                    { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-                );
-                const empData = await empRes.json();
-                const company = empData.data?.company;
-                
-                if (company) {
-                    const companyRes = await cachedGet(
-                        `${ERP_URL}/api/resource/Company/${company}?fields=["default_holiday_list"]`,
-                        { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-                    );
-                    const companyData = await companyRes.json();
-                    holidayListName = companyData.data?.default_holiday_list;
-                    console.log(`🏢 Company holiday list: ${holidayListName || 'None found'}`);
-                }
-            } catch(e) {
-                console.log('Could not fetch company holiday list:', e.message);
-            }
-        }
-        
-        // Fetch holidays from the identified holiday list
-        let holidays = [];
-        
-        if (holidayListName) {
-            try {
-                // Holiday is a child table inside Holiday List - fetch the parent document
-                const holidayListResponse = await cachedGet(
-                    `${ERP_URL}/api/resource/Holiday%20List/${holidayListName}?fields=["*"]`,
-                    { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-                );
-                const holidayListData = await holidayListResponse.json();
-                
-                // Extract holidays from the child table
-                const allHolidays = holidayListData.data?.holidays || [];
-                
-                // Filter by date range
-                holidays = allHolidays.filter(h => 
-                    h.holiday_date >= today && h.holiday_date <= endDate
-                );
-                
-                console.log(`📅 Found ${holidays.length} holidays in date range`);
-            } catch(e) {
-                console.log('Could not fetch holidays from list:', e.message);
-            }
-        }
+    }
+});
+
+// Get payslips for an employee
 
 // Get payslips for an employee
 app.get('/api/payslips/:employeeId', async (req, res) => {
