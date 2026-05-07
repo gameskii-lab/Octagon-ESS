@@ -179,7 +179,6 @@ app.get('/api/employee/:email', async (req, res) => {
 // ============================================
 
 // Get today's shift assignment
-// Get today's shift assignment
 app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     const today = new Date().toISOString().split('T')[0];
@@ -229,6 +228,16 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
                 console.log(`  Location: ${location.name} (${location.latitude}, ${location.longitude})`);
             }
         }
+
+        res.json({
+            success: true,
+            assignment: {
+                shift_type: assignment.shift_type,
+                start_date: assignment.start_date,
+                end_date: assignment.end_date,
+                location: location
+            }
+        });
     } catch (error) {
         console.error('Shift assignment error:', error);
         res.status(500).json({ error: 'Server error fetching shift assignment' });
