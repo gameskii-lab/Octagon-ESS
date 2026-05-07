@@ -946,9 +946,6 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
 
 // Get payslips for an employee
 app.get('/api/payslips/:employeeId', async (req, res) => {
-
-// Get payslips for an employee
-app.get('/api/payslips/:employeeId', async (req, res) => {
     const employeeId = req.params.employeeId;
     
     if (!API_KEY || !API_SECRET) {
@@ -1306,5 +1303,5 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`📍 ERP_URL: ${ERP_URL}`);
-    console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO' }`);
+    console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO'}`);
 });
