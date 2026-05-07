@@ -857,7 +857,7 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
     
     const futureDate = new Date();
     futureDate.setDate(futureDate.getDate() + 30);
-    const endDate = futureDate.toISOString().split('T')[0];
+    const endDate = `${today.split('-')[0]}-12-31`;
     
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
