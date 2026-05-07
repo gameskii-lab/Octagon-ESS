@@ -143,8 +143,7 @@ app.get('/api/employee/:email', async (req, res) => {
     
     try {
         const response = await cachedGet(
-            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base"]&limit=1`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=1`,
         );
         
         const data = await response.json();
@@ -162,7 +161,8 @@ app.get('/api/employee/:email', async (req, res) => {
                     department: emp.department || 'N/A',
                     designation: emp.designation || 'N/A',
                     employment_type: emp.employment_type || 'Daily Wage',
-                    custom_employee_base: emp.custom_employee_base || ''
+                    custom_employee_base: emp.custom_employee_base || '',
+                    default_holiday_list: emp.default_holiday_list || ''  // 👈 ADD THIS
                 }
             });
         } else {
