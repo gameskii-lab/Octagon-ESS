@@ -193,7 +193,7 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     try {
         // Fetch shift assignment with ALL fields including shift_location
         const shiftResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["assigned_to","=","${employeeId}"],["applicable_for","=","Employee"],["docstatus","=",1]]&fields=["*"]&limit=5`,
+            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]&limit=5`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const shiftData = await shiftResponse.json();
@@ -884,7 +884,7 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
         // Get employee's holiday list via Holiday List Assignment
         try {
             const hlaResponse = await cachedGet(
-                `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["holiday_list"]&limit=1`,
+                `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["assigned_to","=","${employeeId}"],["applicable_for","=","Employee"],["docstatus","=",1]]&fields=["holiday_list"]&limit=1`,
                 { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
             );
             const hlaData = await hlaResponse.json();
@@ -1236,6 +1236,23 @@ app.get('/api/debug/doctype-fields/:doctype', async (req, res) => {
             const fieldNames = (metaData.data?.fields || []).map(f => f.fieldname);
             res.json({ fields: fieldNames, message: 'No records found, showing doctype fields' });
         }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+// DEBUG: Get ALL Holiday List Assignments
+app.get('/api/debug/all-holiday-assignments', async (req, res) => {
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/Holiday%20List%20Assignment?fields=["*"]&limit=10`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        res.json(data.data || []);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
