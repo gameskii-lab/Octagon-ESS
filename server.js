@@ -250,13 +250,12 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
 
 // Create check-in
 app.post('/api/checkin', async (req, res) => {
-    const { employeeId, logType, timestamp, latitude, longitude } = req.body;
+    const { employeeId, logType, timestamp, latitude, longitude, offsiteReason, offsiteNotes, isOffsite } = req.body;
     
-    console.log('📝 Check-in request:', { employeeId, logType, timestamp, latitude, longitude });
+    console.log('📝 Check-in request:', { employeeId, logType, timestamp, latitude, longitude, isOffsite });
     
     if (!employeeId || !logType || !timestamp) {
-        console.log('❌ Missing required fields');
-        return res.status(400).json({ error: 'Missing required fields', details: 'employeeId, logType, and timestamp are required' });
+        return res.status(400).json({ error: 'Missing required fields' });
     }
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
@@ -269,10 +268,17 @@ app.post('/api/checkin', async (req, res) => {
             time: timestamp
         };
         
-        // Include latitude/longitude if provided
+        // Always include GPS coordinates
         if (latitude !== undefined && longitude !== undefined) {
             payload.latitude = latitude;
             payload.longitude = longitude;
+        }
+        
+        // Include offsite fields when applicable
+        if (isOffsite) {
+            payload.custom_is_offsite = 1;
+            payload.custom_offsite_reason = offsiteReason || '';
+            payload.custom_offsite_notes = offsiteNotes || '';
         }
         
         console.log('📤 Sending to ERPNext:', JSON.stringify(payload));
@@ -292,7 +298,6 @@ app.post('/api/checkin', async (req, res) => {
         const result = await response.json();
         
         if (response.ok && result.data) {
-            // Clear the today-checkins cache for this employee
             const today = new Date().toISOString().split('T')[0];
             const cacheKey = `${ERP_URL}/api/resource/Employee%20Checkin?filters=[["employee","=","${employeeId}"],["time","like","${today}%"]]&order_by=time%20asc`;
             delete cache[cacheKey];
