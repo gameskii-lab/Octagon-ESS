@@ -878,23 +878,26 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
         );
         const leaveData = await leaveResponse.json();
         
-        // Fetch holidays from the employee's assigned holiday list (v16 behavior)
+        // Fetch holidays from the employee's Holiday List Assignment (v16 behavior)
         let holidayListName = null;
         
-        // Get employee's holiday list
+        // Get employee's holiday list via Holiday List Assignment
         try {
-            const empHolidayRes = await cachedGet(
-                `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["default_holiday_list"]`,
+            const hlaResponse = await cachedGet(
+                `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["holiday_list"]&limit=1`,
                 { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
             );
-            const empHolidayData = await empHolidayRes.json();
-            holidayListName = empHolidayData.data?.default_holiday_list;
-            console.log(`📅 Employee holiday list: ${holidayListName || 'None found'}`);
+            const hlaData = await hlaResponse.json();
+            
+            if (hlaData.data && hlaData.data.length > 0) {
+                holidayListName = hlaData.data[0].holiday_list;
+                console.log(`📅 Employee holiday list from assignment: ${holidayListName}`);
+            }
         } catch(e) {
-            console.log('Could not fetch employee holiday list:', e.message);
+            console.log('Could not fetch holiday list assignment:', e.message);
         }
         
-        // Fallback: Check company's default holiday list
+        // Fallback: Check employee's company default holiday list
         if (!holidayListName) {
             try {
                 const empRes = await cachedGet(
