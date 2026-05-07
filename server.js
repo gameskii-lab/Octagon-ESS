@@ -1257,6 +1257,37 @@ app.get('/api/debug/all-holiday-assignments', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// DEBUG: Get holidays in a specific list
+app.get('/api/debug/holidays-in-list/:listName', async (req, res) => {
+    const listName = decodeURIComponent(req.params.listName);
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Try with parent field
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/Holiday?filters=[["parent","=","${listName}"]]&fields=["*"]&limit=10`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        
+        // Also try with holiday_list field
+        const response2 = await cachedGet(
+            `${ERP_URL}/api/resource/Holiday?filters=[["holiday_list","=","${listName}"]]&fields=["*"]&limit=10`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data2 = await response2.json();
+        
+        res.json({
+            holidays_with_parent: data.data || [],
+            holidays_with_holiday_list: data2.data || []
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // ============================================
 // 404 HANDLER
 // ============================================
