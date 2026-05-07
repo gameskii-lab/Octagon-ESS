@@ -193,7 +193,7 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
     try {
         // Fetch shift assignment with ALL fields including shift_location
         const shiftResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["start_date","<=","${today}"],["end_date",">=","${today}"]]&fields=["*"]&limit=1`,
+            `${ERP_URL}/api/resource/Shift%20Assignment?filters=[["employee","=","${employeeId}"],["docstatus","=",1]]&fields=["*"]&limit=5`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const shiftData = await shiftResponse.json();
