@@ -1178,6 +1178,36 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
     }
 });
 
+// DEBUG: Check Holiday List Assignment
+app.get('/api/debug/holiday-assignment/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["employee","=","${employeeId}"]]&fields=["*"]&limit=5`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        
+        // Also check all holiday lists
+        const listsResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Holiday%20List?fields=["name"]&limit=10`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const listsData = await listsResponse.json();
+        
+        res.json({
+            assignments: data.data || [],
+            allHolidayLists: listsData.data || []
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // ============================================
 // 404 HANDLER
 // ============================================
