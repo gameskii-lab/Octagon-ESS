@@ -144,6 +144,7 @@ app.get('/api/employee/:email', async (req, res) => {
     try {
         const response = await cachedGet(
             `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=1`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         
         const data = await response.json();
