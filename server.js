@@ -1188,7 +1188,7 @@ app.get('/api/debug/holiday-assignment/:employeeId', async (req, res) => {
     
     try {
         const response = await cachedGet(
-            `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["employee","=","${employeeId}"]]&fields=["*"]&limit=5`,
+            `${ERP_URL}/api/resource/Holiday%20List%20Assignment?filters=[["assigned_to","=","${employeeId}"],["applicable_for","=","Employee"]]&fields=["*"]&limit=5`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const data = await response.json();
