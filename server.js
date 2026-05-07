@@ -929,8 +929,23 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
         } catch(e) {
             console.log('Could not fetch holidays:', e.message);
         }
+        
+        // 👇 ADD THIS ENTIRE BLOCK
+        res.json({
+            success: true,
+            shifts: shiftData.data || [],
+            leaves: leaveData.data || [],
+            holidays: holidays,
+            period: { from: today, to: endDate }
+        });
+    } catch (error) {
+        console.error('Schedule error:', error);
+        res.status(500).json({ error: 'Server error fetching schedule' });
+    }
+});
 
 // Get payslips for an employee
+app.get('/api/payslips/:employeeId', async (req, res) => {
 
 // Get payslips for an employee
 app.get('/api/payslips/:employeeId', async (req, res) => {
@@ -1291,5 +1306,5 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`📍 ERP_URL: ${ERP_URL}`);
-    console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO'}`);
+    console.log(`🔑 API_KEY configured: ${API_KEY ? 'YES' : 'NO' }`);
 });
