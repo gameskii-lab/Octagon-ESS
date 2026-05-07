@@ -387,7 +387,7 @@ app.get('/api/leave-requests/:employeeId', async (req, res) => {
     
     try {
         const response = await cachedGet(
-            `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"]]&fields=["leave_type","from_date","to_date","status","total_leave_days"]&order_by=creation%20desc&limit=10`,
+            `${ERP_URL}/api/resource/Leave%20Application?filters=[["employee","=","${employeeId}"]]&fields=["name","leave_type","from_date","to_date","status","total_leave_days","description"]&order_by=creation%20desc&limit=10`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const data = await response.json();
