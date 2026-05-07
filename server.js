@@ -922,29 +922,30 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
         }
         
         // Fetch holidays from the identified holiday list
-        let holidayUrl = `${ERP_URL}/api/resource/Holiday?filters=[["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`;
+        let holidays = [];
         
         if (holidayListName) {
-            holidayUrl = `${ERP_URL}/api/resource/Holiday?filters=[["parent","=","${holidayListName}"],["holiday_date",">=","${today}"],["holiday_date","<=","${endDate}"]]&fields=["description","holiday_date"]&limit=30`;
+            try {
+                // Holiday is a child table inside Holiday List - fetch the parent document
+                const holidayListResponse = await cachedGet(
+                    `${ERP_URL}/api/resource/Holiday%20List/${holidayListName}?fields=["*"]`,
+                    { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+                );
+                const holidayListData = await holidayListResponse.json();
+                
+                // Extract holidays from the child table
+                const allHolidays = holidayListData.data?.holidays || [];
+                
+                // Filter by date range
+                holidays = allHolidays.filter(h => 
+                    h.holiday_date >= today && h.holiday_date <= endDate
+                );
+                
+                console.log(`📅 Found ${holidays.length} holidays in date range`);
+            } catch(e) {
+                console.log('Could not fetch holidays from list:', e.message);
+            }
         }
-        
-        const holidayResponse = await cachedGet(holidayUrl,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-        );
-        const holidayData = await holidayResponse.json();
-        
-        res.json({
-            success: true,
-            shifts: shiftData.data || [],
-            leaves: leaveData.data || [],
-            holidays: holidayData.data || [],
-            period: { from: today, to: endDate }
-        });
-    } catch (error) {
-        console.error('Schedule error:', error);
-        res.status(500).json({ error: 'Server error fetching schedule' });
-    }
-});
 
 // Get payslips for an employee
 app.get('/api/payslips/:employeeId', async (req, res) => {
