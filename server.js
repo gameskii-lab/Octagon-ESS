@@ -1208,6 +1208,38 @@ app.get('/api/debug/holiday-assignment/:employeeId', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// DEBUG: Get doctype fields
+app.get('/api/debug/doctype-fields/:doctype', async (req, res) => {
+    const doctype = req.params.doctype;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        // Try to get any record to see its fields
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/${doctype}?fields=["*"]&limit=1`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        
+        if (data.data && data.data.length > 0) {
+            res.json({ fields: Object.keys(data.data[0]), sample: data.data[0] });
+        } else {
+            // Get doctype meta
+            const metaRes = await cachedGet(
+                `${ERP_URL}/api/resource/DocType/${doctype}?fields=["fields"]`,
+                { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+            );
+            const metaData = await metaRes.json();
+            const fieldNames = (metaData.data?.fields || []).map(f => f.fieldname);
+            res.json({ fields: fieldNames, message: 'No records found, showing doctype fields' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // ============================================
 // 404 HANDLER
 // ============================================
