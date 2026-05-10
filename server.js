@@ -143,22 +143,27 @@ app.get('/api/employee/:email', async (req, res) => {
     }
     
     try {
-        // Hardcoded email-to-ID mapping (works with <10 employees)
-        const emailToId = {
-            'api_user@test.com': 'HR-EMP-00004',
-            'jane@test.com': 'HR-EMP-00008',
-            'brian@test.com': 'HR-EMP-00005'
-        };
+        // Step 1: Get all employee IDs and user_ids
+        const listResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Employee?fields=["name","user_id"]&limit=20`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const listData = await listResponse.json();
+        console.log('📊 Employee list: found', listData.data?.length || 0, 'employees');
         
-        const employeeId = emailToId[email];
+        // Step 2: Find matching employee
+        const match = (listData.data || []).find(e => e.user_id === email);
         
-        if (!employeeId) {
+        if (!match) {
+            console.log(`❌ No employee with user_id: ${email}`);
             return res.status(404).json({ error: 'No employee record found for this user' });
         }
         
-        // Fetch by ID (this works!)
+        console.log(`✅ Found employee: ${match.name} for ${email}`);
+        
+        // Step 3: Fetch full details by ID
         const detailResponse = await cachedGet(
-            `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]`,
+            `${ERP_URL}/api/resource/Employee/${match.name}?fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         const detailData = await detailResponse.json();
