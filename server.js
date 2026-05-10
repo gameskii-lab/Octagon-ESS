@@ -677,6 +677,9 @@ app.post('/api/overtime', async (req, res) => {
 
         const approver = await resolveLeaveApprover(employeeId);
 
+        // Don't set workflow_state — Frappe's workflow engine sets it to the
+        // workflow's default state on insert. Forcing it triggers a transition
+        // validation error.
         const payload = {
             employee: employeeId,
             posting_date: new Date().toISOString().split('T')[0],
@@ -684,9 +687,7 @@ app.post('/api/overtime', async (req, res) => {
             hours: hoursNum,
             reason,
             project,
-            activity_type,
-            status: 'Pending',
-            workflow_state: 'Pending'
+            activity_type
         };
         if (approver) payload.leave_approver = approver;
 
