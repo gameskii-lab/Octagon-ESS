@@ -142,17 +142,20 @@ app.get('/api/employee/:email', async (req, res) => {
     }
     
     try {
+        // Try fetching ALL employees first to see if any match
         const response = await cachedGet(
-            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=1`,
+            `${ERP_URL}/api/resource/Employee?fields=["name","employee_name","user_id","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=50`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
         
         const data = await response.json();
+        console.log(`📊 Found ${data.data?.length || 0} employees total`);
         
-        if (data.data && data.data.length > 0) {
-            const emp = data.data[0];
+        // Find employee by user_id
+        const emp = (data.data || []).find(e => e.user_id === email);
+        
+        if (emp) {
             const employeeName = emp.employee_name || emp.name || 'Employee';
-            
             res.json({
                 success: true,
                 employee: {
@@ -163,7 +166,7 @@ app.get('/api/employee/:email', async (req, res) => {
                     designation: emp.designation || 'N/A',
                     employment_type: emp.employment_type || 'Daily Wage',
                     custom_employee_base: emp.custom_employee_base || '',
-                    default_holiday_list: emp.default_holiday_list || ''  // 👈 ADD THIS
+                    default_holiday_list: emp.default_holiday_list || ''
                 }
             });
         } else {
