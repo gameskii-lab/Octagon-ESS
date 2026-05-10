@@ -134,6 +134,7 @@ app.post('/api/login', async (req, res) => {
 // EMPLOYEE ENDPOINTS (Cached GET)
 // ============================================
 
+// EMPLOYEE ENDPOINT - Workaround for v16 user_id filter issue
 app.get('/api/employee/:email', async (req, res) => {
     const email = decodeURIComponent(req.params.email);
     
@@ -142,20 +143,31 @@ app.get('/api/employee/:email', async (req, res) => {
     }
     
     try {
-        // Try fetching ALL employees first to see if any match
-        const response = await cachedGet(
-            `${ERP_URL}/api/resource/Employee?fields=["name","employee_name","user_id","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=50`,
+        // Step 1: Get ALL employee IDs
+        const listResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Employee?fields=["name","user_id"]&limit=20`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
         );
+        const listData = await listResponse.json();
         
-        const data = await response.json();
-        console.log(`📊 Found ${data.data?.length || 0} employees total`);
+        // Step 2: Find the employee with matching user_id
+        const match = (listData.data || []).find(e => e.user_id === email);
         
-        // Find employee by user_id
-        const emp = (data.data || []).find(e => e.user_id === email);
+        if (!match) {
+            return res.status(404).json({ error: 'No employee record found for this user' });
+        }
         
-        if (emp) {
+        // Step 3: Fetch the full employee record by ID (this works!)
+        const detailResponse = await cachedGet(
+            `${ERP_URL}/api/resource/Employee/${match.name}?fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const detailData = await detailResponse.json();
+        
+        if (detailData.data) {
+            const emp = detailData.data;
             const employeeName = emp.employee_name || emp.name || 'Employee';
+            
             res.json({
                 success: true,
                 employee: {
@@ -170,7 +182,7 @@ app.get('/api/employee/:email', async (req, res) => {
                 }
             });
         } else {
-            res.status(404).json({ error: 'No employee record found for this user' });
+            res.status(404).json({ error: 'Employee record not found' });
         }
     } catch (error) {
         console.error('Employee fetch error:', error);
