@@ -615,7 +615,7 @@ app.get('/api/overtime/options', async (req, res) => {
     try {
         const auth = { 'Authorization': `token ${API_KEY}:${API_SECRET}` };
         const [projRes, actRes] = await Promise.all([
-            fetch(`${ERP_URL}/api/resource/Project?filters=[["status","=","Open"]]&fields=["name","project_name"]&limit=200`, { headers: auth }),
+            fetch(`${ERP_URL}/api/resource/Project?fields=["name","project_name","status"]&order_by=modified%20desc&limit=200`, { headers: auth }),
             fetch(`${ERP_URL}/api/resource/Activity%20Type?fields=["name"]&limit=200`, { headers: auth })
         ]);
         const projData = await projRes.json();
