@@ -782,7 +782,25 @@ app.get('/api/print-format/:doctype/:docname', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
+// DEBUG: Get employee fields
+app.get('/api/debug/employee-fields/:employeeId', async (req, res) => {
+    const employeeId = req.params.employeeId;
+    
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured' });
+    }
+    
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["*"]`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        res.json(data.data || {});
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // ============================================
 // DEBUG ENDPOINTS
 // ============================================
