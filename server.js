@@ -636,12 +636,17 @@ app.get('/api/overtime/:employeeId', async (req, res) => {
     const employeeId = req.session.employeeId;
     if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
     try {
-        const response = await cachedGet(
-            `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","project","activity_type","posting_date"]&order_by=date%20desc&limit=30`,
-            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
-        );
+        const url = `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","project","activity_type","posting_date"]&order_by=date%20desc&limit=30`;
+        const response = await cachedGet(url, { 'Authorization': `token ${API_KEY}:${API_SECRET}` });
         const data = await response.json();
-        res.json({ success: true, requests: data.data || [] });
+        if (data.exc_type || data.exception) {
+            console.error('OT list ERPNext error:', JSON.stringify(data));
+            return res.status(500).json({
+                error: data.message || data.exc_type || 'ERPNext rejected the list query',
+                debug: { erpStatus: response.status, exc_type: data.exc_type, exc: data.exc, employeeId }
+            });
+        }
+        res.json({ success: true, requests: data.data || [], debug: { count: (data.data || []).length, employeeId } });
     } catch (error) {
         console.error('Overtime list error:', error);
         res.status(500).json({ error: 'Server error fetching overtime requests' });
