@@ -7,7 +7,8 @@ const app = express();
 app.use(cors({
     origin: [
         'https://octagon-ess.onrender.com',
-        'https://octagon-ess-frontend-production.up.railway.app',  // 👈 ADD THIS
+        'https://octagon-ess-frontend-production.up.railway.app',
+        'https://octagon-ess-frontend-production-b7ad.up.railway.app',
         'http://localhost:3000',
         'http://127.0.0.1:5500'
     ],
