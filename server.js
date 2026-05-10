@@ -632,15 +632,16 @@ app.get('/api/overtime/options', async (req, res) => {
 });
 
 // List employee's own OT requests, newest first.
-// project + activity_type are Link fields that Frappe blocks in list queries
-// without elevated perms, so we leave them out and pull them via a follow-up
-// single-doc GET (which doesn't have that restriction).
+// Frappe blocks most non-default fields from list queries unless they're flagged
+// in_list_view / in_standard_filter on the doctype, so we keep the list query
+// minimal (just name + sort field) and pull all the rest via per-doc GETs which
+// don't have that restriction.
 app.get('/api/overtime/:employeeId', async (req, res) => {
     const employeeId = req.session.employeeId;
     if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
     try {
         const auth = { 'Authorization': `token ${API_KEY}:${API_SECRET}` };
-        const listUrl = `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","posting_date"]&order_by=date%20desc&limit=30`;
+        const listUrl = `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&order_by=creation%20desc&limit=30`;
         const listResponse = await cachedGet(listUrl, auth);
         const listData = await listResponse.json();
         if (listData.exc_type || listData.exception) {
@@ -650,25 +651,35 @@ app.get('/api/overtime/:employeeId', async (req, res) => {
                 debug: { erpStatus: listResponse.status, exc_type: listData.exc_type, exc: listData.exc, employeeId }
             });
         }
-        const rows = listData.data || [];
+        const stubs = listData.data || [];
 
-        // Hydrate project + activity_type via per-doc GETs in parallel.
-        const hydrated = await Promise.all(rows.map(async row => {
+        // Hydrate every row via a per-doc GET in parallel. cachedGet keeps these
+        // cheap on subsequent loads.
+        const requests = await Promise.all(stubs.map(async stub => {
             try {
                 const detail = await cachedGet(
-                    `${ERP_URL}/api/resource/OT%20Request/${encodeURIComponent(row.name)}`,
+                    `${ERP_URL}/api/resource/OT%20Request/${encodeURIComponent(stub.name)}`,
                     auth
                 );
                 const dd = await detail.json();
-                if (dd.data) {
-                    row.project = dd.data.project || null;
-                    row.activity_type = dd.data.activity_type || null;
-                }
-            } catch (_) { /* leave row as-is on detail failure */ }
-            return row;
+                const d = dd.data || {};
+                return {
+                    name: stub.name,
+                    date: d.date || null,
+                    hours: d.hours ?? null,
+                    reason: d.reason || null,
+                    status: d.status || null,
+                    workflow_state: d.workflow_state || null,
+                    project: d.project || null,
+                    activity_type: d.activity_type || null,
+                    posting_date: d.posting_date || null
+                };
+            } catch (_) {
+                return { name: stub.name };
+            }
         }));
 
-        res.json({ success: true, requests: hydrated, debug: { count: hydrated.length, employeeId } });
+        res.json({ success: true, requests, debug: { count: requests.length, employeeId } });
     } catch (error) {
         console.error('Overtime list error:', error);
         res.status(500).json({ error: 'Server error fetching overtime requests' });
