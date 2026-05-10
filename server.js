@@ -149,6 +149,9 @@ app.get('/', (req, res) => {
             '/api/leave-balance/:employeeId',
             '/api/leave-requests/:employeeId',
             '/api/leave-application',
+            '/api/overtime/options',
+            '/api/overtime/:employeeId',
+            '/api/overtime',
             '/api/approvals/:email',
             '/api/print-format/:doctype/:docname'
         ]
@@ -575,6 +578,142 @@ app.post('/api/leave-application', async (req, res) => {
     } catch (error) {
         console.error('Leave application error:', error);
         res.status(500).json({ error: 'Server error submitting leave application' });
+    }
+});
+
+// ============================================
+// OVERTIME REQUEST ENDPOINTS
+// ============================================
+
+// Resolve approver via the same cascade Leave uses: employee.leave_approver
+// → department.leave_approver → null. Returns user id (email) or null.
+async function resolveLeaveApprover(employeeId) {
+    try {
+        const empRes = await fetch(
+            `${ERP_URL}/api/resource/Employee/${employeeId}?fields=["leave_approver","department"]`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const empData = await empRes.json();
+        if (empData.data?.leave_approver) return empData.data.leave_approver;
+        if (empData.data?.department) {
+            const deptRes = await fetch(
+                `${ERP_URL}/api/resource/Department/${empData.data.department}?fields=["leave_approver"]`,
+                { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+            );
+            const deptData = await deptRes.json();
+            if (deptData.data?.leave_approver) return deptData.data.leave_approver;
+        }
+    } catch (e) {
+        console.warn('Approver resolution failed:', e.message);
+    }
+    return null;
+}
+
+// Form options: open projects + all activity types
+app.get('/api/overtime/options', async (req, res) => {
+    if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
+    try {
+        const auth = { 'Authorization': `token ${API_KEY}:${API_SECRET}` };
+        const [projRes, actRes] = await Promise.all([
+            fetch(`${ERP_URL}/api/resource/Project?filters=[["status","=","Open"]]&fields=["name","project_name"]&limit=200`, { headers: auth }),
+            fetch(`${ERP_URL}/api/resource/Activity%20Type?fields=["name"]&limit=200`, { headers: auth })
+        ]);
+        const projData = await projRes.json();
+        const actData = await actRes.json();
+        res.json({
+            success: true,
+            projects: (projData.data || []).map(p => ({ name: p.name, project_name: p.project_name || p.name })),
+            activity_types: (actData.data || []).map(a => a.name)
+        });
+    } catch (error) {
+        console.error('Overtime options error:', error);
+        res.status(500).json({ error: 'Server error fetching options' });
+    }
+});
+
+// List employee's own OT requests, newest first
+app.get('/api/overtime/:employeeId', async (req, res) => {
+    const employeeId = req.session.employeeId;
+    if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
+    try {
+        const response = await cachedGet(
+            `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","project","activity_type","posting_date"]&order_by=date%20desc&limit=30`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const data = await response.json();
+        res.json({ success: true, requests: data.data || [] });
+    } catch (error) {
+        console.error('Overtime list error:', error);
+        res.status(500).json({ error: 'Server error fetching overtime requests' });
+    }
+});
+
+// Submit a new OT request
+app.post('/api/overtime', async (req, res) => {
+    const { date, hours, reason, project, activity_type } = req.body;
+    const employeeId = req.session.employeeId;
+
+    if (!date || !hours || !reason || !project || !activity_type) {
+        return res.status(400).json({ error: 'Missing required fields (date, hours, reason, project, activity_type)' });
+    }
+    const hoursNum = parseFloat(hours);
+    if (!Number.isFinite(hoursNum) || hoursNum <= 0) {
+        return res.status(400).json({ error: 'Hours must be a positive number' });
+    }
+    if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
+
+    try {
+        // Duplicate guard: reject if a non-cancelled OT Request already exists for this date.
+        const dupRes = await fetch(
+            `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"],["date","=","${date}"],["docstatus","<",2]]&fields=["name","status","workflow_state"]&limit=1`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const dupData = await dupRes.json();
+        if (dupData.data && dupData.data.length > 0) {
+            return res.status(409).json({
+                error: `An overtime request for ${date} already exists (${dupData.data[0].name}).`
+            });
+        }
+
+        const approver = await resolveLeaveApprover(employeeId);
+
+        const payload = {
+            employee: employeeId,
+            posting_date: new Date().toISOString().split('T')[0],
+            date,
+            hours: hoursNum,
+            reason,
+            project,
+            activity_type,
+            status: 'Pending',
+            workflow_state: 'Pending'
+        };
+        if (approver) payload.leave_approver = approver;
+
+        const response = await fetch(
+            `${ERP_URL}/api/resource/OT%20Request`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `token ${API_KEY}:${API_SECRET}`
+                },
+                body: JSON.stringify(payload)
+            }
+        );
+        const result = await response.json();
+        if (response.ok && result.data) {
+            // Invalidate the list cache so it refetches.
+            const cacheKey = `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","project","activity_type","posting_date"]&order_by=date%20desc&limit=30`;
+            delete cache[cacheKey];
+            res.json({ success: true, data: result.data });
+        } else {
+            console.error('OT Request POST failed:', result);
+            res.status(400).json({ error: result.message || result.exc_type || result.exc || 'Failed to submit overtime request' });
+        }
+    } catch (error) {
+        console.error('Overtime submission error:', error);
+        res.status(500).json({ error: 'Server error submitting overtime' });
     }
 });
 
