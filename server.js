@@ -708,8 +708,20 @@ app.post('/api/overtime', async (req, res) => {
             delete cache[cacheKey];
             res.json({ success: true, data: result.data });
         } else {
-            console.error('OT Request POST failed:', result);
-            res.status(400).json({ error: result.message || result.exc_type || result.exc || 'Failed to submit overtime request' });
+            console.error('OT Request POST failed:', JSON.stringify(result));
+            // Pull the human-readable Frappe message out of _server_messages if present.
+            let friendly = null;
+            if (result._server_messages) {
+                try {
+                    const msgs = JSON.parse(result._server_messages);
+                    const first = Array.isArray(msgs) && msgs.length ? JSON.parse(msgs[0]) : null;
+                    if (first?.message) friendly = first.message;
+                } catch (_) {}
+            }
+            res.status(400).json({
+                error: friendly || result.message || result.exc_type || 'Failed to submit overtime request',
+                debug: { exc_type: result.exc_type, exc: result.exc, payload }
+            });
         }
     } catch (error) {
         console.error('Overtime submission error:', error);
