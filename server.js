@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const app = express();
 
 // CORS configuration - Allow your frontend
@@ -76,6 +77,60 @@ const API_KEY = process.env.API_KEY || '';
 const API_SECRET = process.env.API_SECRET || '';
 
 // ============================================
+// SESSION STORE (in-memory; resets on restart)
+// ============================================
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours, sliding
+const sessions = new Map(); // token -> { email, employeeId, employeeName, expiresAt }
+
+function createSession(email, employeeId, employeeName) {
+    const token = crypto.randomBytes(32).toString('hex');
+    sessions.set(token, {
+        email,
+        employeeId,
+        employeeName,
+        expiresAt: Date.now() + SESSION_TTL_MS
+    });
+    return token;
+}
+
+function getSession(token) {
+    const session = sessions.get(token);
+    if (!session) return null;
+    if (Date.now() > session.expiresAt) {
+        sessions.delete(token);
+        return null;
+    }
+    session.expiresAt = Date.now() + SESSION_TTL_MS;
+    return session;
+}
+
+function deleteSession(token) {
+    sessions.delete(token);
+}
+
+function getBearerToken(req) {
+    const auth = req.headers.authorization || '';
+    const match = auth.match(/^Bearer\s+(.+)$/);
+    return match ? match[1] : null;
+}
+
+const PUBLIC_PATHS = new Set(['/', '/ping', '/api/login']);
+
+app.use((req, res, next) => {
+    if (PUBLIC_PATHS.has(req.path)) return next();
+    const token = getBearerToken(req);
+    if (!token) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    const session = getSession(token);
+    if (!session) {
+        return res.status(401).json({ error: 'Session expired or invalid' });
+    }
+    req.session = session;
+    next();
+});
+
+// ============================================
 // ROOT & HEALTH ENDPOINTS
 // ============================================
 
@@ -112,6 +167,9 @@ app.post('/api/login', async (req, res) => {
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password required' });
     }
+    if (!API_KEY || !API_SECRET) {
+        return res.status(500).json({ error: 'API keys not configured on server' });
+    }
     try {
         const response = await fetch(`${ERP_URL}/api/method/login`, {
             method: 'POST',
@@ -119,15 +177,45 @@ app.post('/api/login', async (req, res) => {
             body: JSON.stringify({ usr: email, pwd: password })
         });
         const result = await response.json();
-        if (response.ok && result.message === 'Logged In') {
-            res.json({ success: true, email: email });
-        } else {
-            res.status(401).json({ error: result.message || 'Invalid credentials' });
+        if (!response.ok || result.message !== 'Logged In') {
+            return res.status(401).json({ error: result.message || 'Invalid credentials' });
         }
+
+        // Look up the employee record so the session knows who this is.
+        const empResponse = await fetch(
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=1`,
+            { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
+        );
+        const empData = await empResponse.json();
+        if (!empData.data || empData.data.length === 0) {
+            return res.status(404).json({ error: 'No employee record found for this user' });
+        }
+
+        const emp = empData.data[0];
+        const employeeName = emp.employee_name || emp.name || 'Employee';
+        const employee = {
+            id: emp.name,
+            name: employeeName,
+            employee_name: employeeName,
+            department: emp.department || 'N/A',
+            designation: emp.designation || 'N/A',
+            employment_type: emp.employment_type || 'Daily Wage',
+            custom_employee_base: emp.custom_employee_base || '',
+            default_holiday_list: emp.default_holiday_list || ''
+        };
+
+        const token = createSession(email, emp.name, employeeName);
+        res.json({ success: true, token, email, employee });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Server error during login' });
     }
+});
+
+app.post('/api/logout', (req, res) => {
+    const token = getBearerToken(req);
+    if (token) deleteSession(token);
+    res.json({ success: true });
 });
 
 // ============================================
@@ -135,8 +223,8 @@ app.post('/api/login', async (req, res) => {
 // ============================================
 
 app.get('/api/employee/:email', async (req, res) => {
-    const email = decodeURIComponent(req.params.email);
-    
+    const email = req.session.email;
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
@@ -181,7 +269,7 @@ app.get('/api/employee/:email', async (req, res) => {
 
 // Get today's shift assignment
 app.get('/api/shift-assignment/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
+    const employeeId = req.session.employeeId;
     const today = new Date().toISOString().split('T')[0];
     
     console.log(`🔍 Shift assignment for ${employeeId} on ${today}`);
@@ -251,11 +339,12 @@ app.get('/api/shift-assignment/:employeeId', async (req, res) => {
 
 // Create check-in
 app.post('/api/checkin', async (req, res) => {
-    const { employeeId, logType, timestamp, latitude, longitude, offsiteReason, offsiteNotes, isOffsite } = req.body;
-    
+    const { logType, timestamp, latitude, longitude, offsiteReason, offsiteNotes, isOffsite } = req.body;
+    const employeeId = req.session.employeeId;
+
     console.log('📝 Check-in request:', { employeeId, logType, timestamp, latitude, longitude, isOffsite });
-    
-    if (!employeeId || !logType || !timestamp) {
+
+    if (!logType || !timestamp) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
     if (!API_KEY || !API_SECRET) {
@@ -323,7 +412,7 @@ app.post('/api/checkin', async (req, res) => {
 // ============================================
 
 app.get('/api/leave-balance/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
+    const employeeId = req.session.employeeId;
     console.log(`🔍 Fetching leave balance for: ${employeeId}`);
 
     if (!API_KEY || !API_SECRET) {
@@ -379,8 +468,8 @@ app.get('/api/leave-balance/:employeeId', async (req, res) => {
 });
 
 app.get('/api/leave-requests/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    
+    const employeeId = req.session.employeeId;
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
@@ -399,10 +488,11 @@ app.get('/api/leave-requests/:employeeId', async (req, res) => {
 });
 
 app.post('/api/leave-application', async (req, res) => {
-    const { employeeId, leaveType, fromDate, toDate, halfDay, halfDayDate, reason } = req.body;
+    const { leaveType, fromDate, toDate, halfDay, halfDayDate, reason } = req.body;
+    const employeeId = req.session.employeeId;
     console.log('📝 Leave application received:', { employeeId, leaveType, fromDate, toDate });
 
-    if (!employeeId || !leaveType || !fromDate || !toDate) {
+    if (!leaveType || !fromDate || !toDate) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
     if (!API_KEY || !API_SECRET) {
@@ -505,7 +595,7 @@ async function isWorkflowActive(doctype) {
 
 // 1. Fetch Pending Approvals
 app.get('/api/approvals/:email', async (req, res) => {
-    const email = decodeURIComponent(req.params.email);
+    const email = req.session.email;
     if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
 
     try {
@@ -619,6 +709,17 @@ app.post('/api/workflow-action', async (req, res) => {
         );
         const docData = await getResponse.json();
         if (!docData.data) return res.status(404).json({ error: 'Document not found' });
+
+        // Verify the caller is actually allowed to act on this document.
+        // For Leave Application we can check leave_approver directly; other doctypes
+        // rely on workflow role membership which we can't easily verify here, so they
+        // remain trust-the-session for now.
+        if (doctype === 'Leave Application') {
+            const approver = docData.data.leave_approver;
+            if (approver && approver !== req.session.email && approver !== req.session.employeeName) {
+                return res.status(403).json({ error: 'You are not the approver for this document' });
+            }
+        }
 
         // 2. Check if Workflow is Active for this Doctype
         const workflowActive = await isWorkflowActive(doctype);
@@ -806,8 +907,8 @@ app.get('/api/debug/employee-fields/:employeeId', async (req, res) => {
 // ============================================
 
 app.get('/api/debug/leave-allocation/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    
+    const employeeId = req.session.employeeId;
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured' });
     }
@@ -870,7 +971,7 @@ app.get('/api/debug/all-leave-allocations', async (req, res) => {
 
 // Get upcoming schedule for an employee (next 30 days)
 app.get('/api/schedule/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
+    const employeeId = req.session.employeeId;
     const today = new Date().toISOString().split('T')[0];
     
     const futureDate = new Date();
@@ -964,8 +1065,8 @@ app.get('/api/schedule/:employeeId', async (req, res) => {
 
 // Get payslips for an employee
 app.get('/api/payslips/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    
+    const employeeId = req.session.employeeId;
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured on server' });
     }
@@ -1001,12 +1102,22 @@ app.get('/api/payslips/:employeeId', async (req, res) => {
 // Get payslip print format
 app.get('/api/payslip-print/:payslipName', async (req, res) => {
     const payslipName = req.params.payslipName;
-    
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured' });
     }
-    
+
     try {
+        // Verify this payslip belongs to the caller.
+        const ownerCheck = await cachedGet(
+            `${ERP_URL}/api/resource/Salary%20Slip/${encodeURIComponent(payslipName)}?fields=["employee"]`,
+            { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
+        );
+        const ownerData = await ownerCheck.json();
+        if (ownerData.data?.employee !== req.session.employeeId) {
+            return res.status(403).json({ error: 'Not authorized to view this payslip' });
+        }
+
         const response = await cachedGet(
             `${ERP_URL}/api/method/frappe.www.printview.get_html_and_style?doc=${payslipName}&doctype=Salary%20Slip&print_format=Salary%20Slip%20Standard`,
             { 'Authorization': `token ${API_KEY}:${API_SECRET}` }
@@ -1059,8 +1170,8 @@ app.get('/api/debug/leave-applications', async (req, res) => {
 
 // Get onboarding status for an employee
 app.get('/api/onboarding/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    
+    const employeeId = req.session.employeeId;
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured' });
     }
@@ -1131,9 +1242,10 @@ app.get('/api/onboarding/:employeeId', async (req, res) => {
 
 // Mark an onboarding activity as complete
 app.post('/api/onboarding/complete-activity', async (req, res) => {
-    const { employeeId, activityName } = req.body;
-    
-    if (!employeeId || !activityName) {
+    const { activityName } = req.body;
+    const employeeId = req.session.employeeId;
+
+    if (!activityName) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -1174,7 +1286,7 @@ app.post('/api/onboarding/complete-activity', async (req, res) => {
 
 // Get today's check-ins
 app.get('/api/today-checkins/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
+    const employeeId = req.session.employeeId;
     const today = new Date().toISOString().split('T')[0];
     
     if (!API_KEY || !API_SECRET) {
@@ -1196,8 +1308,8 @@ app.get('/api/today-checkins/:employeeId', async (req, res) => {
 
 // DEBUG: Check Holiday List Assignment
 app.get('/api/debug/holiday-assignment/:employeeId', async (req, res) => {
-    const employeeId = req.params.employeeId;
-    
+    const employeeId = req.session.employeeId;
+
     if (!API_KEY || !API_SECRET) {
         return res.status(500).json({ error: 'API keys not configured' });
     }

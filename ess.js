@@ -14,6 +14,39 @@ let config = {
     todaysShift: null
 };
 
+function getMiddlewareBase() {
+    return config.middlewareUrl.replace(/\/$/, '');
+}
+
+function clearSessionStorage() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('erpnext_config');
+    localStorage.removeItem('currentEmployee');
+    localStorage.removeItem('userEmail');
+}
+
+let _sessionExpiredHandled = false;
+function handleSessionExpired() {
+    if (_sessionExpiredHandled) return;
+    _sessionExpiredHandled = true;
+    clearSessionStorage();
+    alert('Session expired. Please sign in again.');
+    location.reload();
+}
+
+// Authenticated fetch wrapper. Adds the bearer token and redirects to login on 401.
+async function apiFetch(path, options = {}) {
+    const token = localStorage.getItem('authToken');
+    const headers = { ...(options.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const response = await fetch(`${getMiddlewareBase()}${path}`, { ...options, headers });
+    if (response.status === 401) {
+        handleSessionExpired();
+        throw new Error('Session expired');
+    }
+    return response;
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     // 🔥 FORCE LOGIN SCREEN VISIBLE
@@ -26,7 +59,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (dashboardScreen) dashboardScreen.style.display = 'none';
     if (leaveScreen) leaveScreen.style.display = 'none';
     if (appHeader) appHeader.style.display = 'none';
-    
+
+    // Force re-login if any persisted session is missing the auth token.
+    if (!localStorage.getItem('authToken')) {
+        clearSessionStorage();
+    }
+
     getLocation();
     
     // 🔥 ATTACH CHECK-IN EVENT LISTENER HERE
@@ -74,7 +112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     String(now.getMinutes()).padStart(2, '0') + ':' + 
                     String(now.getSeconds()).padStart(2, '0');
                 
-                const response = await fetch(`${config.middlewareUrl}/api/checkin`, {
+                const response = await apiFetch(`/api/checkin`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -225,35 +263,31 @@ async function handleLogin() {
     }
     
     try {
-        // Step 1: Authenticate via middleware
-        const loginResponse = await fetch(`${config.middlewareUrl}/api/login`, {
+        // Authenticate via middleware. On success the server returns a session
+        // token plus the employee record (so we skip a follow-up fetch).
+        const loginResponse = await fetch(`${getMiddlewareBase()}/api/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
         });
-        
+
         const loginResult = await loginResponse.json();
-        
-        if (!loginResult.success) {
+
+        if (!loginResult.success || !loginResult.token || !loginResult.employee) {
             throw new Error(loginResult.error || 'Invalid credentials');
         }
-        
-        // Step 2: Fetch employee record
-        const empResponse = await fetch(`${config.middlewareUrl}/api/employee/${encodeURIComponent(email)}`);
-        const empResult = await empResponse.json();
-        
-        if (!empResult.success) {
-            throw new Error(empResult.error || 'Employee record not found');
-        }
-        
-        currentEmployee = empResult.employee;
+
+        _sessionExpiredHandled = false;
+        localStorage.setItem('authToken', loginResult.token);
+
+        currentEmployee = loginResult.employee;
         config.employeeId = currentEmployee.id;
         config.employmentType = currentEmployee.employment_type || 'Daily Wage';
         userEmail = email;
-        
+
         // Update drawer info with employee name
         updateDrawerInfo();
-        
+
         // Store for persistence
         localStorage.setItem('erpnext_config', JSON.stringify(config));
         localStorage.setItem('currentEmployee', JSON.stringify(currentEmployee));
@@ -294,7 +328,7 @@ async function handleLogin() {
 // Fetch today's shift assignment from middleware
 async function fetchTodaysShiftAssignment() {
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/shift-assignment/${config.employeeId}`);
+        const response = await apiFetch(`/api/shift-assignment/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success && result.assignment && result.assignment.location) {
@@ -379,7 +413,7 @@ function initializeDashboard() {
 
 async function loadFieldWorkerDashboard() {
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/today-checkins/${config.employeeId}`);
+        const response = await apiFetch(`/api/today-checkins/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success && result.checkins) {
@@ -453,7 +487,7 @@ async function loadOfficeStaffDashboard() {
 }
 async function checkCurrentStatus() {
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/today-checkins/${config.employeeId}`);
+        const response = await apiFetch(`/api/today-checkins/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success && result.checkins && result.checkins.length > 0) {
@@ -492,10 +526,18 @@ function viewSchedule() {
 
 function logout() {
     closeDrawer();
-    localStorage.removeItem('erpnext_config');
-    localStorage.removeItem('currentEmployee');
-    localStorage.removeItem('userEmail');
-    
+
+    // Best-effort server-side session invalidation; don't block on it.
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        fetch(`${getMiddlewareBase()}/api/logout`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        }).catch(() => {});
+    }
+
+    clearSessionStorage();
+
     currentEmployee = null;
     userEmail = '';
     config.employeeId = '';
@@ -643,7 +685,7 @@ async function loadLeaveScreen() {
 
 async function loadLeaveBalance() {
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/leave-balance/${config.employeeId}`);
+        const response = await apiFetch(`/api/leave-balance/${config.employeeId}`);
         const result = await response.json();
         
         console.log('🔍 Leave balance result:', result);
@@ -722,7 +764,7 @@ async function loadLeaveBalance() {
 
 async function loadLeaveRequests() {
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/leave-requests/${config.employeeId}`);
+        const response = await apiFetch(`/api/leave-requests/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success && result.requests && result.requests.length > 0) {
@@ -774,7 +816,7 @@ async function submitLeaveApplication() {
     }
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/leave-application`, {
+        const response = await apiFetch(`/api/leave-application`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -833,7 +875,7 @@ async function loadApprovalsScreen() {
     document.getElementById('approvalDetail').classList.add('hidden');
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/approvals/${encodeURIComponent(userEmail)}`);
+        const response = await apiFetch(`/api/approvals/${encodeURIComponent(userEmail)}`);
         const result = await response.json();
         
         if (result.success && result.approvals && result.approvals.length > 0) {
@@ -875,7 +917,7 @@ async function viewApproval(doctype, docname, nextAction) {
     
     // Fetch print format
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/print-format/${doctype}/${docname}`);
+        const response = await apiFetch(`/api/print-format/${doctype}/${docname}`);
         const result = await response.json();
         
         if (result.success && result.html) {
@@ -907,7 +949,7 @@ async function submitWorkflowAction(action) {
     btn.textContent = 'Processing...';
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/workflow-action`, {
+        const response = await apiFetch(`/api/workflow-action`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -960,7 +1002,7 @@ async function loadOnboardingScreen() {
     document.getElementById('onboardingActivities').innerHTML = '<p style="color: #666; text-align: center;">Loading...</p>';
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/onboarding/${config.employeeId}`);
+        const response = await apiFetch(`/api/onboarding/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success && result.onboarding) {
@@ -1049,7 +1091,7 @@ async function completeOnboardingActivity(activityName) {
     btn.textContent = 'Completing...';
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/onboarding/complete-activity`, {
+        const response = await apiFetch(`/api/onboarding/complete-activity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1104,7 +1146,7 @@ async function loadPayslipsScreen() {
     document.getElementById('payslipDetail').classList.add('hidden');
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/payslips/${config.employeeId}`);
+        const response = await apiFetch(`/api/payslips/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success && result.payslips && result.payslips.length > 0) {
@@ -1171,7 +1213,7 @@ async function viewPayslipDetail(payslipName) {
     document.getElementById('payslipDetail').scrollIntoView({ behavior: 'smooth' });
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/payslip-print/${payslipName}`);
+        const response = await apiFetch(`/api/payslip-print/${payslipName}`);
         const result = await response.json();
         
         if (result.success && result.html) {
@@ -1239,7 +1281,7 @@ async function loadScheduleScreen() {
     document.getElementById('scheduleList').innerHTML = '<p style="color: #666; text-align: center;">Loading...</p>';
     
     try {
-        const response = await fetch(`${config.middlewareUrl}/api/schedule/${config.employeeId}`);
+        const response = await apiFetch(`/api/schedule/${config.employeeId}`);
         const result = await response.json();
         
         if (result.success) {
