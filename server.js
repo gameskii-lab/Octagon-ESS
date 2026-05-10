@@ -1304,6 +1304,11 @@ app.get('/api/debug/holidays-in-list/:listName', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+const data = await response.json();
+console.log(`📊 ERPNext Employee lookup: ${data.data?.length || 0} records found`);
+if (data.data?.length > 0) {
+    console.log(`  First result: ${data.data[0].name} - ${data.data[0].employee_name}`);
+}
 // ============================================
 // 404 HANDLER
 // ============================================
