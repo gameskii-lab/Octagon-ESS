@@ -631,22 +631,44 @@ app.get('/api/overtime/options', async (req, res) => {
     }
 });
 
-// List employee's own OT requests, newest first
+// List employee's own OT requests, newest first.
+// project + activity_type are Link fields that Frappe blocks in list queries
+// without elevated perms, so we leave them out and pull them via a follow-up
+// single-doc GET (which doesn't have that restriction).
 app.get('/api/overtime/:employeeId', async (req, res) => {
     const employeeId = req.session.employeeId;
     if (!API_KEY || !API_SECRET) return res.status(500).json({ error: 'API keys not configured' });
     try {
-        const url = `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","project","activity_type","posting_date"]&order_by=date%20desc&limit=30`;
-        const response = await cachedGet(url, { 'Authorization': `token ${API_KEY}:${API_SECRET}` });
-        const data = await response.json();
-        if (data.exc_type || data.exception) {
-            console.error('OT list ERPNext error:', JSON.stringify(data));
+        const auth = { 'Authorization': `token ${API_KEY}:${API_SECRET}` };
+        const listUrl = `${ERP_URL}/api/resource/OT%20Request?filters=[["employee","=","${employeeId}"]]&fields=["name","date","hours","reason","status","workflow_state","posting_date"]&order_by=date%20desc&limit=30`;
+        const listResponse = await cachedGet(listUrl, auth);
+        const listData = await listResponse.json();
+        if (listData.exc_type || listData.exception) {
+            console.error('OT list ERPNext error:', JSON.stringify(listData));
             return res.status(500).json({
-                error: data.message || data.exc_type || 'ERPNext rejected the list query',
-                debug: { erpStatus: response.status, exc_type: data.exc_type, exc: data.exc, employeeId }
+                error: listData.message || listData.exc_type || 'ERPNext rejected the list query',
+                debug: { erpStatus: listResponse.status, exc_type: listData.exc_type, exc: listData.exc, employeeId }
             });
         }
-        res.json({ success: true, requests: data.data || [], debug: { count: (data.data || []).length, employeeId } });
+        const rows = listData.data || [];
+
+        // Hydrate project + activity_type via per-doc GETs in parallel.
+        const hydrated = await Promise.all(rows.map(async row => {
+            try {
+                const detail = await cachedGet(
+                    `${ERP_URL}/api/resource/OT%20Request/${encodeURIComponent(row.name)}`,
+                    auth
+                );
+                const dd = await detail.json();
+                if (dd.data) {
+                    row.project = dd.data.project || null;
+                    row.activity_type = dd.data.activity_type || null;
+                }
+            } catch (_) { /* leave row as-is on detail failure */ }
+            return row;
+        }));
+
+        res.json({ success: true, requests: hydrated, debug: { count: hydrated.length, employeeId } });
     } catch (error) {
         console.error('Overtime list error:', error);
         res.status(500).json({ error: 'Server error fetching overtime requests' });
