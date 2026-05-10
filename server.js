@@ -183,17 +183,17 @@ app.post('/api/login', async (req, res) => {
         }
 
         // Look up the employee record so the session knows who this is.
+        // default_holiday_list is intentionally omitted: ERPNext blocks it in
+        // list queries unless the API user has elevated perms. The field isn't
+        // used by the frontend; if a future caller needs it, fetch it via a
+        // single-doc GET (/api/resource/Employee/<name>) instead.
         const empResponse = await fetch(
-            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base","default_holiday_list"]&limit=1`,
+            `${ERP_URL}/api/resource/Employee?filters=[["user_id","=","${email}"]]&fields=["name","employee_name","department","designation","employment_type","custom_employee_base"]&limit=1`,
             { headers: { 'Authorization': `token ${API_KEY}:${API_SECRET}` } }
         );
         const empData = await empResponse.json();
         if (!empData.data || empData.data.length === 0) {
-            console.error('Employee lookup empty for', email, '- ERPNext response:', JSON.stringify(empData));
-            return res.status(404).json({
-                error: 'No employee record found for this user',
-                debug: { erpStatus: empResponse.status, erp: empData, keyPrefix: API_KEY ? API_KEY.slice(0, 6) + '…' : null }
-            });
+            return res.status(404).json({ error: 'No employee record found for this user' });
         }
 
         const emp = empData.data[0];
