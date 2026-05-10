@@ -189,7 +189,11 @@ app.post('/api/login', async (req, res) => {
         );
         const empData = await empResponse.json();
         if (!empData.data || empData.data.length === 0) {
-            return res.status(404).json({ error: 'No employee record found for this user' });
+            console.error('Employee lookup empty for', email, '- ERPNext response:', JSON.stringify(empData));
+            return res.status(404).json({
+                error: 'No employee record found for this user',
+                debug: { erpStatus: empResponse.status, erp: empData, keyPrefix: API_KEY ? API_KEY.slice(0, 6) + '…' : null }
+            });
         }
 
         const emp = empData.data[0];
